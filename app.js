@@ -313,15 +313,24 @@ function pumpHires() {
     img.dataset.hiresQ = "";
     if (!inView.has(img) || img.dataset.hires === "1") continue;
     hiresActive++;
-    const full = img.dataset.full;
-    const pre = new Image();
-    pre.onload = () => {
+    // Crossfade: cargamos la original en una capa encima y la fundimos. La
+    // miniatura sigue debajo todo el tiempo, así que no hay parpadeo.
+    const tile = img.parentElement;
+    const hi = document.createElement("img");
+    hi.className = "hires";
+    hi.alt = "";
+    hi.decoding = "async";
+    hi.addEventListener("load", () => {
       hiresActive--;
-      if (inView.has(img)) { img.src = full; img.dataset.hires = "1"; }
+      if (inView.has(img) && img.dataset.hires !== "1" && tile && tile.isConnected) {
+        img.dataset.hires = "1";
+        img.insertAdjacentElement("afterend", hi); // debajo de #num y ★, encima del thumb
+        requestAnimationFrame(() => hi.classList.add("shown"));
+      }
       pumpHires();
-    };
-    pre.onerror = () => { hiresActive--; pumpHires(); };
-    pre.src = full;
+    });
+    hi.addEventListener("error", () => { hiresActive--; pumpHires(); });
+    hi.src = img.dataset.full;
   }
 }
 
