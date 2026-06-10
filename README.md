@@ -2,7 +2,7 @@
 
 Galería web **completa y sin repeticiones** de las fotos de la carrera Pinatarius 2026, con visor a pantalla completa y descarga individual o en ZIP.
 
-🔗 **[Ver la galería](#)** _(URL de GitHub Pages tras el despliegue)_
+🔗 **[Ver la galería](https://vontus.github.io/pinatarius-2026-galeria/)**
 
 ## Por qué existe
 
