@@ -274,21 +274,24 @@ body.selecting .tile .check { display: flex; }
   align-items: center;
   justify-content: center;
   gap: 14px;
+  overflow: hidden; /* nada se sale de la pantalla */
 }
-/* Carrusel: viewport recorta y el track lleva 3 slides (anterior/actual/siguiente) */
+/* Carrusel: viewport recorta y el track lleva 3 slides (anterior/actual/siguiente).
+   Medidas en % (no vw) para no contar la barra de scroll ni desbordar. */
 .lb-viewport {
   position: relative;
-  width: 100vw;
-  height: 80vh;
+  flex: 1 1 auto;
+  min-height: 0;
+  width: 100%;
   overflow: hidden;
 }
 .lb-track {
   display: flex;
   height: 100%;
-  transform: translateX(-100vw); /* centra el slide del medio (actual) */
+  transform: translateX(-100%); /* centra el slide del medio (actual) */
 }
 .lb-slide {
-  flex: 0 0 100vw;
+  flex: 0 0 100%;
   height: 100%;
   object-fit: contain;
   user-select: none;
@@ -423,7 +426,6 @@ body { padding-bottom: calc(var(--footer-h, 64px) + 10px); }
   /* Visor: las flechas se ocultan (se navega con swipe) y se da más espacio a
      la imagen; los botones del pie van apilados a ancho completo. */
   .lb-nav { display: none; }
-  .lb-viewport { height: 72vh; }
   .lb-caption {
     flex-direction: column;
     align-items: stretch;

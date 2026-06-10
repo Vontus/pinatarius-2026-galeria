@@ -576,7 +576,7 @@ function assignSlides() {
 
 function trackReset() {
   lbTrack.style.transition = "none";
-  lbTrack.style.transform = "translateX(-100vw)"; // centra el slide del medio
+  lbTrack.style.transform = "translateX(-100%)"; // centra el slide del medio
 }
 
 function showLightbox() {
@@ -595,9 +595,9 @@ function showLightbox() {
 function commitSlide(delta) {
   if (swAnimating || visiblePhotos.length < 2) return;
   swAnimating = true;
-  const targetX = -100 - delta * 100; // vw: siguiente -> -200, anterior -> 0
+  const targetX = -100 - delta * 100; // %: siguiente -> -200, anterior -> 0
   lbTrack.style.transition = "transform 0.2s ease-out";
-  lbTrack.style.transform = `translateX(${targetX}vw)`;
+  lbTrack.style.transform = `translateX(${targetX}%)`;
   const onEnd = () => {
     lbTrack.removeEventListener("transitionend", onEnd);
     lbIndex = (lbIndex + delta + visiblePhotos.length) % visiblePhotos.length;
@@ -785,7 +785,7 @@ lb.addEventListener("touchstart", (e) => {
 lb.addEventListener("touchmove", (e) => {
   if (!swiping || pinching || zScale > 1 || e.touches.length !== 1) return;
   swDx = e.touches[0].clientX - swStartX;
-  lbTrack.style.transform = `translateX(calc(-100vw + ${swDx}px))`;
+  lbTrack.style.transform = `translateX(calc(-100% + ${swDx}px))`;
 }, { passive: true });
 
 lb.addEventListener("touchend", () => {
@@ -794,7 +794,7 @@ lb.addEventListener("touchend", () => {
   if (Math.abs(swDx) > SW_THRESHOLD) commitSlide(swDx < 0 ? 1 : -1);
   else { // no llega al umbral: vuelve a centrar
     lbTrack.style.transition = "transform 0.2s ease-out";
-    lbTrack.style.transform = "translateX(-100vw)";
+    lbTrack.style.transform = "translateX(-100%)";
   }
 });
 
