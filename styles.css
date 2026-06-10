@@ -13,7 +13,8 @@
 
 * { box-sizing: border-box; }
 
-html { scroll-behavior: smooth; }
+/* Sin scroll-behavior: smooth a propósito: el salto a arriba es instantáneo
+   para no atravesar toda la rejilla cargando miniaturas al pasar. */
 
 body {
   margin: 0;
@@ -270,6 +271,25 @@ body.selecting .tile .check { display: flex; }
   box-shadow: 0 8px 30px rgba(0,0,0,0.5);
   font-size: 0.9rem;
 }
+
+/* Botón volver arriba */
+.to-top {
+  position: fixed;
+  right: 18px;
+  bottom: 18px;
+  z-index: 40;
+  width: 46px;
+  height: 46px;
+  border-radius: 50%;
+  border: 1px solid var(--border);
+  background: var(--accent);
+  color: #fff;
+  font-size: 1.4rem;
+  line-height: 1;
+  cursor: pointer;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.45);
+}
+.to-top:hover { background: var(--accent-hover); }
 
 .footer {
   max-width: 1400px;

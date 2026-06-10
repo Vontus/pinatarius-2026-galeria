@@ -20,63 +20,58 @@
 const BASE = "https://paraisodeportivosanpedrodelpinatar.com/wp-content/uploads";
 const pad3 = (n) => String(n).padStart(3, "0");
 
-// Definición de cada colección/categoría.
-const CATS = [
-  {
-    key: "p", label: "General", fallback: 2940,
-    full: (n) => `${BASE}/PINATARIUS-2026.${n}.jpg`,
-    thumb: (n) => `${BASE}/PINATARIUS-2026.${n}-150x150.jpg`,
-    file: (n) => `pinatarius-2026-${n}.jpg`,
-  },
-  {
-    key: "v", label: "Varias", fallback: 619,
-    full: (n) => `${BASE}/variadas_pinatarius-${pad3(n)}.jpg`,
-    thumb: (n) => `${BASE}/variadas_pinatarius-${pad3(n)}-150x150.jpg`,
-    file: (n) => `variadas-${pad3(n)}.jpg`,
-  },
-  {
-    key: "playa", label: "Playa", fallback: 2430,
-    full: (n) => `${BASE}/PLAYA_PINATARIUS-${n}.jpg`,
-    thumb: (n) => `${BASE}/PLAYA_PINATARIUS-${n}-150x150.jpg`,
-    file: (n) => `playa-${n}.jpg`,
-  },
-  {
-    key: "villa", label: "Villananitos", fallback: 560,
-    full: (n) => `${BASE}/PINATARIUS_VILLANANITOS-${n}.jpg`,
-    thumb: (n) => `${BASE}/PINATARIUS_VILLANANITOS-${n}-150x150.jpg`,
-    file: (n) => `villananitos-${n}.jpg`,
-  },
-  {
-    key: "podium", label: "Podium", fallback: 15,
-    full: (n) => `${BASE}/podium_pinatarius-${n}.jpg`,
-    thumb: (n) => `${BASE}/podium_pinatarius-${n}-150x150.jpg`,
-    file: (n) => `podium-${n}.jpg`,
-  },
-];
-
-const DATA = window.PHOTO_DATA || {};
-
-function numbersFor(cat) {
-  const baked = DATA[cat.key];
-  if (Array.isArray(baked) && baked.length) return baked;
-  // Reserva: generamos 1..fallback (el onerror oculta los huecos).
-  return Array.from({ length: cat.fallback }, (_, i) => i + 1);
+// Helper para construir una "fuente" (un patrón de nombre de fichero con su rango).
+// Mostramos el RANGO COMPLETO min..max sin excepciones: si una foto no carga,
+// el tile se queda gris y reintenta (no descartamos nada por si fue rate limit).
+function source(tag, prefix, min, max, opts = {}) {
+  // opts.width = nº de dígitos con ceros a la izquierda (ojo: muchas categorías
+  // rellenan los números bajos, p. ej. PLAYA_PINATARIUS-0001).
+  const w = opts.width || 0;
+  const fmt = w ? (n) => String(n).padStart(w, "0") : (n) => String(n);
+  const sep = opts.sep || "-"; // separador entre prefijo y número
+  return {
+    tag, min, max,
+    full: (n) => `${BASE}/${prefix}${sep}${fmt(n)}.jpg`,
+    thumb: (n) => `${BASE}/${prefix}${sep}${fmt(n)}-150x150.jpg`,
+    file: (n) => `${tag}-${fmt(n)}.jpg`,
+  };
 }
+
+// Categorías = carpetas de la galería oficial. Cada una puede tener VARIAS
+// fuentes (patrones de nombre de fichero distintos para la misma categoría).
+const CATS = [
+  { key: "meta", label: "Meta y premeta", sources: [
+    source("p", "PINATARIUS-2026", 1, 2940, { sep: "." }),
+  ]},
+  { key: "playa", label: "Playa", sources: [
+    source("playa", "PLAYA_PINATARIUS", 1, 2430, { width: 4 }),
+    source("villa", "PINATARIUS_VILLANANITOS", 1, 553, { width: 3 }),
+  ]},
+  { key: "varias", label: "Varias", sources: [
+    source("v", "variadas_pinatarius", 1, 619, { width: 3 }),
+  ]},
+  { key: "photocall", label: "Photocall y premios", sources: [
+    source("pc", "PINATARIUS_PHOTOCALL", 1, 224, { width: 3 }),
+    source("pod", "podium_pinatarius", 1, 1),
+  ]},
+];
 
 function buildPhotos() {
   const out = [];
   for (const cat of CATS) {
-    for (const n of numbersFor(cat)) {
-      out.push({
-        id: `${cat.key}-${n}`,
-        num: n,
-        cat: cat.key,
-        catLabel: cat.label,
-        full: cat.full(n),
-        thumb: cat.thumb(n),
-        file: cat.file(n),
-        label: CATS.length > 1 ? `${cat.label} · #${n}` : `#${n}`,
-      });
+    for (const s of cat.sources) {
+      for (let n = s.min; n <= s.max; n++) {
+        out.push({
+          id: `${s.tag}-${n}`,
+          num: n,
+          cat: cat.key,
+          catLabel: cat.label,
+          full: s.full(n),
+          thumb: s.thumb(n),
+          file: s.file(n),
+          label: `${cat.label} · #${n}`,
+        });
+      }
     }
   }
   return out;
@@ -483,6 +478,21 @@ lb.addEventListener("touchend", (e) => {
   const dx = e.changedTouches[0].clientX - touchX;
   if (Math.abs(dx) > 50) step(dx < 0 ? 1 : -1);
   touchX = null;
+});
+
+// --- Botón "volver arriba" (salto instantáneo, sin animación) ---
+const toTop = document.getElementById("toTop");
+let toTopRaf = null;
+window.addEventListener("scroll", () => {
+  if (toTopRaf !== null) return;
+  toTopRaf = requestAnimationFrame(() => {
+    toTopRaf = null;
+    toTop.classList.toggle("hidden", window.scrollY < 600);
+  });
+}, { passive: true });
+toTop.addEventListener("click", () => {
+  // 'auto' = salto inmediato: no atravesamos la rejilla cargando miniaturas.
+  window.scrollTo({ top: 0, behavior: "auto" });
 });
 
 // Si la URL trae #foto-ID al cargar, abrimos esa foto (enlace compartido).
