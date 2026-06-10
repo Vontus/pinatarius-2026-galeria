@@ -563,5 +563,15 @@ toTop.addEventListener("click", () => {
   window.scrollTo({ top: 0, behavior: "auto" });
 });
 
+// --- Altura real del footer fijo (para el hueco inferior y posicionar botones) ---
+const footerEl = document.querySelector(".footer");
+function setFooterH() {
+  if (footerEl) {
+    document.documentElement.style.setProperty("--footer-h", `${footerEl.offsetHeight}px`);
+  }
+}
+setFooterH();
+window.addEventListener("resize", () => requestAnimationFrame(setFooterH));
+
 // Si la URL trae #foto-ID al cargar, abrimos esa foto (enlace compartido).
 syncFromHash();
