@@ -1,18 +1,18 @@
 "use strict";
 
 /*
- * Galería Pinatarius 2026.
+ * Galería Pinatarius 2026 — todas las colecciones, categorizadas.
  *
- * La web oficial carga las fotos por scroll infinito contra una API
- * (wp-json/blema/v1/galeria-vmfo) cuyo parámetro `offset` se ignora: cada
- * petición devuelve siempre las mismas 20 fotos -> de ahí las repeticiones.
+ * La web oficial carga las fotos por scroll infinito contra una API rota
+ * (wp-json/blema/v1/galeria-vmfo) que ignora offset/filtro y siempre devuelve
+ * las mismas 20 fotos -> de ahí las repeticiones. Aquí no usamos esa API.
  *
- * Aquí no usamos esa API. Las fotos de la carrera están subidas con nombres
- * secuenciales en DOS colecciones distintas (lo comprobamos: no se solapan):
- *   - PINATARIUS-2026.N.jpg        (N = 1..2940, ~2900 fotos, el grueso)
- *   - variadas_pinatarius-NNN.jpg  (N = 1..619, categoría "Varias"; <100 con ceros)
- * Generamos las URLs directamente. Si algún número no existe, su hueco se oculta
- * solo (onerror) — sin repeticiones.
+ * Las fotos de la carrera están subidas en VARIAS colecciones con numeración
+ * secuencial (comprobado: son fotos distintas, no se solapan). Cada colección
+ * es una categoría en la UI. La lista exacta de números que existen está
+ * horneada en data.js (window.PHOTO_DATA), comprobada una a una con HEAD, así
+ * que la web no hace ni una sola petición fallida.
+ *
  * Las imágenes del CDN responden con Access-Control-Allow-Origin: *, así que se
  * pueden mostrar y descargar (incluso en ZIP) sin problemas de CORS.
  */
@@ -20,37 +20,62 @@
 const BASE = "https://paraisodeportivosanpedrodelpinatar.com/wp-content/uploads";
 const pad3 = (n) => String(n).padStart(3, "0");
 
-// Cada colección: cómo construir la URL completa, la miniatura y el nombre de fichero.
-const SETS = [
+// Definición de cada colección/categoría.
+const CATS = [
   {
-    key: "p",
-    max: 2940,
+    key: "p", label: "General", fallback: 2940,
     full: (n) => `${BASE}/PINATARIUS-2026.${n}.jpg`,
     thumb: (n) => `${BASE}/PINATARIUS-2026.${n}-150x150.jpg`,
     file: (n) => `pinatarius-2026-${n}.jpg`,
-    label: (n) => `#${n}`,
   },
   {
-    key: "v",
-    max: 619,
+    key: "v", label: "Varias", fallback: 619,
     full: (n) => `${BASE}/variadas_pinatarius-${pad3(n)}.jpg`,
     thumb: (n) => `${BASE}/variadas_pinatarius-${pad3(n)}-150x150.jpg`,
     file: (n) => `variadas-${pad3(n)}.jpg`,
-    label: (n) => `Varias #${n}`,
+  },
+  {
+    key: "playa", label: "Playa", fallback: 2430,
+    full: (n) => `${BASE}/PLAYA_PINATARIUS-${n}.jpg`,
+    thumb: (n) => `${BASE}/PLAYA_PINATARIUS-${n}-150x150.jpg`,
+    file: (n) => `playa-${n}.jpg`,
+  },
+  {
+    key: "villa", label: "Villananitos", fallback: 560,
+    full: (n) => `${BASE}/PINATARIUS_VILLANANITOS-${n}.jpg`,
+    thumb: (n) => `${BASE}/PINATARIUS_VILLANANITOS-${n}-150x150.jpg`,
+    file: (n) => `villananitos-${n}.jpg`,
+  },
+  {
+    key: "podium", label: "Podium", fallback: 15,
+    full: (n) => `${BASE}/podium_pinatarius-${n}.jpg`,
+    thumb: (n) => `${BASE}/podium_pinatarius-${n}-150x150.jpg`,
+    file: (n) => `podium-${n}.jpg`,
   },
 ];
 
+const DATA = window.PHOTO_DATA || {};
+
+function numbersFor(cat) {
+  const baked = DATA[cat.key];
+  if (Array.isArray(baked) && baked.length) return baked;
+  // Reserva: generamos 1..fallback (el onerror oculta los huecos).
+  return Array.from({ length: cat.fallback }, (_, i) => i + 1);
+}
+
 function buildPhotos() {
   const out = [];
-  for (const s of SETS) {
-    for (let n = 1; n <= s.max; n++) {
+  for (const cat of CATS) {
+    for (const n of numbersFor(cat)) {
       out.push({
-        id: s.key + n,
+        id: `${cat.key}-${n}`,
         num: n,
-        full: s.full(n),
-        thumb: s.thumb(n),
-        file: s.file(n),
-        label: s.label(n),
+        cat: cat.key,
+        catLabel: cat.label,
+        full: cat.full(n),
+        thumb: cat.thumb(n),
+        file: cat.file(n),
+        label: CATS.length > 1 ? `${cat.label} · #${n}` : `#${n}`,
       });
     }
   }
@@ -62,6 +87,7 @@ const byId = new Map(PHOTOS.map((p) => [p.id, p]));
 
 // --- DOM refs ---
 const grid = document.getElementById("grid");
+const filtersEl = document.getElementById("filters");
 const countEl = document.getElementById("count");
 const emptyEl = document.getElementById("empty");
 const searchEl = document.getElementById("search");
@@ -84,10 +110,50 @@ const lbShare = document.getElementById("lbShare");
 // --- State ---
 let selecting = false;
 const selected = new Set(); // ids
+let currentCat = "all";
 let visiblePhotos = PHOTOS.slice();
 let lbIndex = -1;
 
 countEl.textContent = `~${PHOTOS.length}`;
+
+// --- Barra de filtros ---
+function buildFilters() {
+  const counts = {};
+  for (const p of PHOTOS) counts[p.cat] = (counts[p.cat] || 0) + 1;
+  const defs = [{ key: "all", label: "Todas", n: PHOTOS.length }];
+  for (const c of CATS) if (counts[c.key]) defs.push({ key: c.key, label: c.label, n: counts[c.key] });
+  // Si solo hay una categoría con fotos, no mostramos filtros.
+  if (defs.length <= 2) { filtersEl.classList.add("hidden"); return; }
+  filtersEl.innerHTML = "";
+  for (const d of defs) {
+    const b = document.createElement("button");
+    b.className = "fbtn" + (d.key === currentCat ? " active" : "");
+    b.dataset.cat = d.key;
+    b.innerHTML = `${d.label}<span class="cnt">${d.n}</span>`;
+    b.addEventListener("click", () => setCategory(d.key));
+    filtersEl.appendChild(b);
+  }
+}
+
+function setCategory(key) {
+  currentCat = key;
+  for (const b of filtersEl.children) b.classList.toggle("active", b.dataset.cat === key);
+  applyFilters();
+}
+
+// --- Filtro combinado (categoría + búsqueda) ---
+function applyFilters() {
+  const q = searchEl.value.trim();
+  visiblePhotos = PHOTOS.filter((p) => {
+    if (currentCat !== "all" && p.cat !== currentCat) return false;
+    if (q === "") return true;
+    if (/^\d+$/.test(q)) return p.num === parseInt(q, 10) || String(p.num).includes(q);
+    return false;
+  });
+  renderGrid(visiblePhotos);
+}
+
+searchEl.addEventListener("input", applyFilters);
 
 // --- Render grid (lazy load) ---
 const io = new IntersectionObserver((entries, obs) => {
@@ -112,7 +178,6 @@ function makeTile(photo) {
   img.dataset.src = photo.thumb;
   img.addEventListener("load", () => img.classList.add("loaded"));
   img.addEventListener("error", () => {
-    // Si no hay miniatura 150x150, recae en la imagen completa; si tampoco, se oculta.
     if (img.dataset.fallback !== "1") {
       img.dataset.fallback = "1";
       img.src = photo.full;
@@ -123,7 +188,7 @@ function makeTile(photo) {
 
   const num = document.createElement("span");
   num.className = "num";
-  num.textContent = photo.label;
+  num.textContent = `#${photo.num}`;
 
   const check = document.createElement("span");
   check.className = "check";
@@ -144,6 +209,7 @@ function renderGrid(list) {
   emptyEl.classList.toggle("hidden", list.length > 0);
 }
 
+buildFilters();
 renderGrid(visiblePhotos);
 
 // --- Tile click: select or open ---
@@ -161,20 +227,6 @@ function onTileClick(photo, tile) {
     openLightbox(photo.id);
   }
 }
-
-// --- Search (por número de foto) ---
-searchEl.addEventListener("input", () => {
-  const q = searchEl.value.trim();
-  if (q === "") {
-    visiblePhotos = PHOTOS.slice();
-  } else if (/^\d+$/.test(q)) {
-    const num = parseInt(q, 10);
-    visiblePhotos = PHOTOS.filter((p) => p.num === num || String(p.num).includes(q));
-  } else {
-    visiblePhotos = [];
-  }
-  renderGrid(visiblePhotos);
-});
 
 // --- Selection mode ---
 selectToggle.addEventListener("click", () => {
@@ -230,7 +282,7 @@ async function downloadOne(photo) {
     if (!res.ok) throw new Error(res.status);
     triggerDownload(await res.blob(), photo.file);
   } catch (e) {
-    window.open(photo.full, "_blank"); // fallback: abrir para guardar a mano
+    window.open(photo.full, "_blank");
   }
 }
 
@@ -273,16 +325,13 @@ selDownload.addEventListener("click", async () => {
   selDownload.disabled = false;
 });
 
-// --- Lightbox + deep-linking por hash (#foto-ID) para compartir ---
+// --- Lightbox + deep-linking por hash (#foto-ID) ---
 let suppressHash = false;
 
 function setHash(value) {
   suppressHash = true;
-  if (value) {
-    location.hash = value;
-  } else {
-    history.replaceState(null, "", location.pathname + location.search);
-  }
+  if (value) location.hash = value;
+  else history.replaceState(null, "", location.pathname + location.search);
   setTimeout(() => { suppressHash = false; }, 0);
 }
 
@@ -290,11 +339,7 @@ function openLightbox(id) {
   const photo = byId.get(id);
   if (!photo) return;
   let idx = visiblePhotos.findIndex((p) => p.id === id);
-  if (idx < 0) {
-    // La foto no está en el filtro actual: lo quitamos para poder verla.
-    visiblePhotos = PHOTOS.slice();
-    idx = visiblePhotos.findIndex((p) => p.id === id);
-  }
+  if (idx < 0) { visiblePhotos = PHOTOS.slice(); idx = visiblePhotos.findIndex((p) => p.id === id); }
   lbIndex = idx;
   showLightbox();
   lb.classList.remove("hidden");
@@ -330,7 +375,7 @@ function step(delta) {
 
 function syncFromHash() {
   if (suppressHash) return;
-  const m = /^#foto-([pv]\d+)$/.exec(location.hash);
+  const m = /^#foto-([a-z]+-\d+)$/.exec(location.hash);
   if (m && byId.has(m[1])) { openLightbox(m[1]); return; }
   if (!lb.classList.contains("hidden")) closeLightbox();
 }
@@ -352,15 +397,9 @@ lbShare.addEventListener("click", async () => {
   if (!photo) return;
   const url = `${location.origin}${location.pathname}#foto-${photo.id}`;
   try {
-    if (navigator.share) {
-      await navigator.share({ title: `${photo.label} · Pinatarius 2026`, url });
-    } else {
-      await navigator.clipboard.writeText(url);
-      toast("Enlace copiado al portapapeles");
-    }
-  } catch (e) {
-    /* compartir cancelado */
-  }
+    if (navigator.share) await navigator.share({ title: `${photo.label} · Pinatarius 2026`, url });
+    else { await navigator.clipboard.writeText(url); toast("Enlace copiado al portapapeles"); }
+  } catch (e) { /* cancelado */ }
 });
 
 document.addEventListener("keydown", (e) => {

@@ -109,6 +109,28 @@ main {
   margin: 0 auto;
   padding: 18px;
 }
+
+/* Filtros por categoría */
+.filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+.filters .fbtn {
+  background: var(--surface);
+  color: var(--text);
+  border: 1px solid var(--border);
+  padding: 7px 14px;
+  border-radius: 999px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s, color 0.15s;
+}
+.filters .fbtn:hover { background: var(--surface-2); }
+.filters .fbtn.active { background: #fff; color: #111; border-color: #fff; }
+.filters .fbtn .cnt { opacity: 0.6; font-weight: 400; margin-left: 4px; }
 .grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
