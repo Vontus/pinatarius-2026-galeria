@@ -204,12 +204,11 @@ function setCategory(key) {
   updateQuery();
 }
 
-// Refleja categoría y búsqueda en la URL (?cat=&q=) para poder compartir la vista.
+// Refleja solo la categoría en la URL (?cat=) para poder compartir la vista.
+// La búsqueda NO va en la URL (para compartir una foto ya está el enlace #foto-).
 function updateQuery() {
   const params = new URLSearchParams();
   if (currentCat !== "all") params.set("cat", currentCat);
-  const q = searchEl.value.trim();
-  if (q) params.set("q", q);
   const qs = params.toString();
   history.replaceState(null, "", location.pathname + (qs ? "?" + qs : "") + location.hash);
 }
@@ -231,7 +230,7 @@ function applyFilters() {
   renderGrid(visiblePhotos);
 }
 
-searchEl.addEventListener("input", () => { applyFilters(); updateQuery(); });
+searchEl.addEventListener("input", applyFilters);
 
 // --- Carga de miniaturas: cola con límite de concurrencia + cancelación ---
 //
@@ -434,13 +433,11 @@ function renderGrid(list) {
   appendBatch(); // primer lote; el resto se añade al hacer scroll
 }
 
-// --- Estado inicial desde la URL (?cat=&q=) ---
+// --- Estado inicial desde la URL (?cat=) ---
 (function initFromQuery() {
   const params = new URLSearchParams(location.search);
   const cat = params.get("cat");
   if (cat && (cat === "fav" || CATS.some((c) => c.key === cat))) currentCat = cat;
-  const q = params.get("q");
-  if (q) searchEl.value = q;
 })();
 
 buildFilters();
