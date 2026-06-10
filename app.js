@@ -389,22 +389,6 @@ function renderGrid(list) {
   if (q) searchEl.value = q;
 })();
 
-// --- Toggle de tamaño de miniaturas (persistido) ---
-const sizeToggle = document.getElementById("sizeToggle");
-const SIZE_KEY = "pinatarius2026:bigthumbs";
-function applyThumbSize() {
-  const big = localStorage.getItem(SIZE_KEY) === "1";
-  document.body.classList.toggle("big-thumbs", big);
-  sizeToggle.textContent = big ? "⊟" : "⊞";
-  sizeToggle.classList.toggle("active", big);
-}
-try { applyThumbSize(); } catch (e) {}
-sizeToggle.addEventListener("click", () => {
-  const big = !(localStorage.getItem(SIZE_KEY) === "1");
-  try { localStorage.setItem(SIZE_KEY, big ? "1" : "0"); } catch (e) {}
-  applyThumbSize();
-});
-
 buildFilters();
 applyFilters();
 
@@ -504,6 +488,19 @@ function openLightbox(id) {
   lb.classList.remove("hidden");
   document.body.style.overflow = "hidden";
   setHash(`foto-${id}`);
+  maybeSwipeHint();
+}
+
+// Pista de swipe la primera vez en móvil (para que se sepa que se puede deslizar).
+const HINT_KEY = "pinatarius2026:swipehint";
+const isCoarse = window.matchMedia && window.matchMedia("(pointer: coarse)").matches;
+function maybeSwipeHint() {
+  if (!isCoarse) return;
+  try {
+    if (localStorage.getItem(HINT_KEY) === "1") return;
+    localStorage.setItem(HINT_KEY, "1");
+  } catch (e) {}
+  toast("Desliza ← → para cambiar de foto · pellizca para ampliar");
 }
 
 function showLightbox() {
@@ -575,8 +572,7 @@ lbImg.addEventListener("wheel", (e) => {
   applyZoom();
 }, { passive: false });
 
-// Doble clic / doble toque: alterna zoom
-let lastTap = 0;
+// Doble clic (escritorio): alterna zoom
 lbImg.addEventListener("dblclick", () => toggleZoom());
 function toggleZoom() {
   zScale = zScale > 1 ? 1 : 2.5;
@@ -600,40 +596,48 @@ window.addEventListener("mousemove", (e) => {
 });
 window.addEventListener("mouseup", () => { if (dragging) { dragging = false; lbImg.style.cursor = "grab"; } });
 
-// Táctil: pellizco para zoom, un dedo para paneo cuando hay zoom
-let pinchDist = 0, pinchBase = 1, panX0 = 0, panY0 = 0, panBaseX = 0, panBaseY = 0;
+// Táctil: pellizco para ampliar en modo "peek" (estilo Instagram). Al soltar
+// los dedos, la imagen vuelve sola a su tamaño con una pequeña animación.
+let pinchDist = 0, midStartX = 0, midStartY = 0, baseTx = 0, baseTy = 0, pinching = false;
 function dist(t) {
-  const dx = t[0].clientX - t[1].clientX, dy = t[0].clientY - t[1].clientY;
-  return Math.hypot(dx, dy);
+  return Math.hypot(t[0].clientX - t[1].clientX, t[0].clientY - t[1].clientY);
+}
+function mid(t) {
+  return { x: (t[0].clientX + t[1].clientX) / 2, y: (t[0].clientY + t[1].clientY) / 2 };
 }
 lbImg.addEventListener("touchstart", (e) => {
   if (e.touches.length === 2) {
-    pinchDist = dist(e.touches); pinchBase = zScale;
-  } else if (e.touches.length === 1) {
-    // doble-tap
-    const now = Date.now();
-    if (now - lastTap < 300) { toggleZoom(); }
-    lastTap = now;
-    if (zScale > 1) {
-      panX0 = e.touches[0].clientX; panY0 = e.touches[0].clientY; panBaseX = zx; panBaseY = zy;
-    }
+    pinching = true;
+    pinchDist = dist(e.touches);
+    const m = mid(e.touches);
+    midStartX = m.x; midStartY = m.y; baseTx = zx; baseTy = zy;
+    lbImg.style.transition = "none";
   }
 }, { passive: true });
 lbImg.addEventListener("touchmove", (e) => {
-  if (e.touches.length === 2) {
+  if (e.touches.length === 2 && pinching) {
     e.preventDefault();
-    zScale = Math.max(1, Math.min(Z_MAX, pinchBase * (dist(e.touches) / pinchDist)));
-    clampZoom(); applyZoom();
-  } else if (e.touches.length === 1 && zScale > 1) {
-    e.preventDefault();
-    zx = panBaseX + (e.touches[0].clientX - panX0);
-    zy = panBaseY + (e.touches[0].clientY - panY0);
-    clampZoom(); applyZoom();
+    zScale = Math.max(1, Math.min(Z_MAX, dist(e.touches) / pinchDist));
+    const m = mid(e.touches);
+    zx = baseTx + (m.x - midStartX);
+    zy = baseTy + (m.y - midStartY);
+    applyZoom();
   }
 }, { passive: false });
-lbImg.addEventListener("touchend", (e) => {
-  if (e.touches.length === 0 && zScale <= 1) resetZoom();
-});
+function endPinch() {
+  if (!pinching) return;
+  pinching = false;
+  lbImg.style.transition = "transform 0.2s ease-out";
+  zScale = 1; zx = 0; zy = 0;
+  applyZoom(); // anima de vuelta a tamaño normal
+  setTimeout(() => {
+    lbImg.style.transition = "";
+    lbImg.style.transform = "";
+    lbImg.classList.remove("zoomed");
+  }, 220);
+}
+lbImg.addEventListener("touchend", (e) => { if (e.touches.length < 2) endPinch(); });
+lbImg.addEventListener("touchcancel", endPinch);
 
 function step(delta) {
   if (lbIndex < 0) return;
