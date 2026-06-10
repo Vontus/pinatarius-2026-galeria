@@ -28,7 +28,7 @@ function source(tag, prefix, min, max, opts = {}) {
   // rellenan los números bajos, p. ej. PLAYA_PINATARIUS-0001).
   const w = opts.width || 0;
   const fmt = w ? (n) => String(n).padStart(w, "0") : (n) => String(n);
-  const sep = opts.sep || "-"; // separador entre prefijo y número
+  const sep = opts.sep ?? "-"; // separador (ojo: "" es válido = número pegado)
   return {
     tag, min, max,
     full: (n) => `${BASE}/${prefix}${sep}${fmt(n)}.jpg`,
@@ -40,8 +40,14 @@ function source(tag, prefix, min, max, opts = {}) {
 // Categorías = carpetas de la galería oficial. Cada una puede tener VARIAS
 // fuentes (patrones de nombre de fichero distintos para la misma categoría).
 const CATS = [
-  { key: "meta", label: "Meta y premeta", sources: [
+  { key: "barro", label: "Barro y gladiator", sources: [
     source("p", "PINATARIUS-2026", 1, 2940, { sep: "." }),
+  ]},
+  { key: "meta", label: "Meta y premeta", sources: [
+    source("pm", "premeta_pinatarius", 1, 2936, { sep: "" }),
+  ]},
+  { key: "salida", label: "Salida", sources: [
+    source("sal", "salida_pinatarius", 1, 312, { sep: "" }),
   ]},
   { key: "playa", label: "Playa", sources: [
     source("playa", "PLAYA_PINATARIUS", 1, 2430, { width: 4 }),
@@ -49,6 +55,7 @@ const CATS = [
   ]},
   { key: "varias", label: "Varias", sources: [
     source("v", "variadas_pinatarius", 1, 619, { width: 3 }),
+    source("vg", "variadas_pinatarius", 1, 126, { sep: "" }),
   ]},
   { key: "photocall", label: "Photocall y premios", sources: [
     source("pc", "PINATARIUS_PHOTOCALL", 1, 224, { width: 3 }),
