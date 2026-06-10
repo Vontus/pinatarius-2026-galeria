@@ -95,11 +95,7 @@ const filtersEl = document.getElementById("filters");
 const countEl = document.getElementById("count");
 const emptyEl = document.getElementById("empty");
 const searchEl = document.getElementById("search");
-const selectToggle = document.getElementById("selectToggle");
-const selbar = document.getElementById("selbar");
-const selCount = document.getElementById("selCount");
-const selClear = document.getElementById("selClear");
-const selDownload = document.getElementById("selDownload");
+const downloadFavs = document.getElementById("downloadFavs");
 const toastEl = document.getElementById("toast");
 
 const lb = document.getElementById("lb");
@@ -110,13 +106,53 @@ const lbClose = document.getElementById("lbClose");
 const lbPrev = document.getElementById("lbPrev");
 const lbNext = document.getElementById("lbNext");
 const lbShare = document.getElementById("lbShare");
+const lbFav = document.getElementById("lbFav");
 
 // --- State ---
-let selecting = false;
-const selected = new Set(); // ids
 let currentCat = "all";
 let visiblePhotos = PHOTOS.slice();
 let lbIndex = -1;
+
+// --- Favoritas (persistidas en localStorage) ---
+const FAV_KEY = "pinatarius2026:favs";
+let favorites = new Set();
+try {
+  favorites = new Set(JSON.parse(localStorage.getItem(FAV_KEY) || "[]"));
+} catch (e) { /* localStorage no disponible */ }
+
+function saveFavs() {
+  try { localStorage.setItem(FAV_KEY, JSON.stringify([...favorites])); } catch (e) {}
+}
+
+function toggleFav(id) {
+  if (favorites.has(id)) favorites.delete(id);
+  else favorites.add(id);
+  saveFavs();
+  syncFavUI(id);
+  updateFavFilter();
+  if (currentCat === "fav") applyFilters(); // si estamos viendo favoritas, refresca
+}
+
+// Refleja el estado de una foto en su tile y en el visor.
+function syncFavUI(id) {
+  const on = favorites.has(id);
+  const tile = grid.querySelector(`.tile[data-id="${id}"]`);
+  if (tile) {
+    const fb = tile.querySelector(".fav");
+    if (fb) { fb.classList.toggle("on", on); fb.textContent = on ? "★" : "☆"; }
+  }
+  const cur = visiblePhotos[lbIndex];
+  if (cur && cur.id === id) updateLbFav();
+}
+
+function updateLbFav() {
+  const cur = visiblePhotos[lbIndex];
+  if (!cur) return;
+  const on = favorites.has(cur.id);
+  lbFav.classList.toggle("on", on);
+  lbFav.setAttribute("aria-pressed", on ? "true" : "false");
+  lbFav.textContent = on ? "★ Favorita" : "☆ Favorita";
+}
 
 // Total real de fotos = suma de las 7 carpetas de la galería oficial (vmfo):
 // BARRO 2161 + SALIDA 376 + PLAYA 3043 + GLADIATOR 570 + VARIAS 808 +
@@ -141,6 +177,21 @@ function buildFilters() {
     b.addEventListener("click", () => setCategory(d.key));
     filtersEl.appendChild(b);
   }
+  updateFavFilter(); // botón de favoritas SIEMPRE, al final
+}
+
+// El botón "★ Favoritas" va siempre el último (aunque haya 0; el contenido
+// saldrá vacío). Solo actualizamos su contador.
+function updateFavFilter() {
+  let b = filtersEl.querySelector('.fbtn[data-cat="fav"]');
+  if (!b) {
+    b = document.createElement("button");
+    b.className = "fbtn fbtn-fav" + (currentCat === "fav" ? " active" : "");
+    b.dataset.cat = "fav";
+    b.addEventListener("click", () => setCategory("fav"));
+    filtersEl.appendChild(b);
+  }
+  b.innerHTML = `★ Favoritas<span class="cnt">${favorites.size.toLocaleString("es-ES")}</span>`;
 }
 
 function setCategory(key) {
@@ -153,11 +204,16 @@ function setCategory(key) {
 function applyFilters() {
   const q = searchEl.value.trim();
   visiblePhotos = PHOTOS.filter((p) => {
-    if (currentCat !== "all" && p.cat !== currentCat) return false;
+    if (currentCat === "fav") { if (!favorites.has(p.id)) return false; }
+    else if (currentCat !== "all" && p.cat !== currentCat) return false;
     if (q === "") return true;
-    if (/^\d+$/.test(q)) return p.num === parseInt(q, 10) || String(p.num).includes(q);
+    // Coincidencia EXACTA: "32" muestra solo la #32 (no 320, 321, 323...).
+    if (/^\d+$/.test(q)) return p.num === parseInt(q, 10);
     return false;
   });
+  emptyEl.textContent = currentCat === "fav"
+    ? "Aún no tienes favoritas. Marca fotos con la ★."
+    : "No hay fotos que coincidan.";
   renderGrid(visiblePhotos);
 }
 
@@ -230,7 +286,6 @@ function makeTile(photo) {
   const tile = document.createElement("div");
   tile.className = "tile";
   tile.dataset.id = photo.id;
-  if (selected.has(photo.id)) tile.classList.add("selected");
 
   const img = document.createElement("img");
   img.alt = photo.label;
@@ -263,14 +318,20 @@ function makeTile(photo) {
   num.className = "num";
   num.textContent = `#${photo.num}`;
 
-  const check = document.createElement("span");
-  check.className = "check";
-  check.textContent = "✓";
+  const fav = document.createElement("button");
+  fav.type = "button";
+  fav.className = "fav" + (favorites.has(photo.id) ? " on" : "");
+  fav.textContent = favorites.has(photo.id) ? "★" : "☆";
+  fav.setAttribute("aria-label", "Marcar como favorita");
+  fav.addEventListener("click", (e) => {
+    e.stopPropagation(); // no abrir el visor al marcar
+    toggleFav(photo.id);
+  });
 
-  tile.append(img, num, check);
+  tile.append(img, num, fav);
   io.observe(img);
 
-  tile.addEventListener("click", () => onTileClick(photo, tile));
+  tile.addEventListener("click", () => openLightbox(photo.id));
   return tile;
 }
 
@@ -311,46 +372,6 @@ function renderGrid(list) {
 buildFilters();
 renderGrid(visiblePhotos);
 
-// --- Tile click: select or open ---
-function onTileClick(photo, tile) {
-  if (selecting) {
-    if (selected.has(photo.id)) {
-      selected.delete(photo.id);
-      tile.classList.remove("selected");
-    } else {
-      selected.add(photo.id);
-      tile.classList.add("selected");
-    }
-    updateSelbar();
-  } else {
-    openLightbox(photo.id);
-  }
-}
-
-// --- Selection mode ---
-selectToggle.addEventListener("click", () => {
-  selecting = !selecting;
-  document.body.classList.toggle("selecting", selecting);
-  selectToggle.classList.toggle("active", selecting);
-  selectToggle.textContent = selecting ? "Cancelar selección" : "Seleccionar";
-  selbar.classList.toggle("hidden", !selecting);
-  if (!selecting) clearSelection();
-});
-
-function clearSelection() {
-  selected.clear();
-  for (const tile of grid.children) tile.classList.remove("selected");
-  updateSelbar();
-}
-selClear.addEventListener("click", clearSelection);
-
-function updateSelbar() {
-  const c = selected.size;
-  selCount.textContent = `${c} seleccionada${c === 1 ? "" : "s"}`;
-  selDownload.disabled = c === 0;
-  selDownload.textContent = c > 0 ? `Descargar ZIP (${c})` : "Descargar ZIP";
-}
-
 // --- Toast ---
 let toastTimer = null;
 function toast(msg, persist = false) {
@@ -385,15 +406,18 @@ async function downloadOne(photo) {
   }
 }
 
-// --- ZIP de la selección ---
-selDownload.addEventListener("click", async () => {
-  if (selected.size === 0) return;
+// --- Descargar favoritas (ZIP) ---
+downloadFavs.addEventListener("click", async () => {
+  const ids = [...favorites];
+  if (ids.length === 0) {
+    toast("No tienes favoritas. Marca fotos con la ★ y vuelve a intentarlo.");
+    return;
+  }
   if (typeof JSZip === "undefined") {
     toast("No se pudo cargar el compresor ZIP. Reintenta.");
     return;
   }
-  const ids = [...selected];
-  selDownload.disabled = true;
+  downloadFavs.disabled = true;
   const zip = new JSZip();
   let done = 0;
   let failed = 0;
@@ -418,10 +442,10 @@ selDownload.addEventListener("click", async () => {
 
   toast("Comprimiendo…", true);
   const blob = await zip.generateAsync({ type: "blob" });
-  triggerDownload(blob, `pinatarius-2026-seleccion-${ids.length}.zip`);
+  triggerDownload(blob, `pinatarius-2026-favoritas-${ids.length}.zip`);
   hideToast();
-  toast(failed ? `ZIP listo (${failed} fotos no se pudieron incluir).` : "ZIP descargado.");
-  selDownload.disabled = false;
+  toast(failed ? `ZIP listo (${failed} fotos no se pudieron incluir).` : "Favoritas descargadas.");
+  downloadFavs.disabled = false;
 });
 
 // --- Lightbox + deep-linking por hash (#foto-ID) ---
@@ -454,7 +478,13 @@ function showLightbox() {
   lbLabel.textContent = photo.label;
   lbDownload.href = photo.full;
   lbDownload.download = photo.file;
+  updateLbFav();
 }
+
+lbFav.addEventListener("click", () => {
+  const photo = visiblePhotos[lbIndex];
+  if (photo) toggleFav(photo.id);
+});
 
 function closeLightbox() {
   lb.classList.add("hidden");

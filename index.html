@@ -17,14 +17,7 @@
     </div>
     <div class="controls">
       <input id="search" type="search" inputmode="numeric" placeholder="Buscar por nº de foto (ej. 312)" autocomplete="off" />
-      <button id="selectToggle" class="btn">Seleccionar</button>
-    </div>
-  </div>
-  <div id="selbar" class="selbar hidden">
-    <span id="selCount">0 seleccionadas</span>
-    <div class="selbar-actions">
-      <button id="selClear" class="btn btn-ghost">Limpiar</button>
-      <button id="selDownload" class="btn btn-primary" disabled>Descargar ZIP</button>
+      <button id="downloadFavs" class="btn">★ Descargar favoritas</button>
     </div>
   </div>
 </header>
@@ -44,6 +37,7 @@
     <img id="lbImg" alt="" />
     <figcaption class="lb-caption">
       <span id="lbLabel"></span>
+      <button id="lbFav" class="btn" aria-pressed="false">☆ Favorita</button>
       <button id="lbShare" class="btn">Compartir</button>
       <a id="lbDownload" class="btn btn-primary" download>Descargar foto</a>
     </figcaption>

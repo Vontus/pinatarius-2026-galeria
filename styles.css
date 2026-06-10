@@ -190,6 +190,48 @@ body.selecting .tile .check { display: flex; }
 .tile.selected { border-color: var(--accent); }
 .tile.selected .check { background: var(--accent); border-color: var(--accent); }
 
+/* Estrella de favorita en cada tile (arriba-izquierda) */
+.tile .fav {
+  position: absolute;
+  top: 6px;
+  left: 6px;
+  width: 28px;
+  height: 28px;
+  border: none;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.5);
+  color: #fff;
+  font-size: 0.95rem;
+  line-height: 1;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0.55;
+  transition: opacity 0.15s, transform 0.1s;
+}
+.tile:hover .fav,
+.tile .fav.on { opacity: 1; }
+.tile .fav.on { color: #e3b341; } /* dorado suave, no chillón */
+.tile .fav:hover { transform: scale(1.12); }
+
+/* Botón de filtro "Favoritas" (amarillo elegante) */
+.filters .fbtn-fav {
+  border-color: rgba(227, 179, 65, 0.5);
+  color: #e3b341;
+}
+.filters .fbtn-fav.active {
+  background: #e3b341;
+  border-color: #e3b341;
+  color: #1a1a1a;
+}
+
+/* Botón favorita en el visor */
+#lbFav.on {
+  color: #e3b341;
+  border-color: rgba(227, 179, 65, 0.5);
+}
+
 .empty {
   text-align: center;
   color: var(--muted);
