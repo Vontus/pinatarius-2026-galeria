@@ -574,9 +574,11 @@ function assignSlides() {
   lbNextImg.src = next ? next.full : "";
 }
 
+// El track mide 300% (3 slides). Centrar el del medio = -33.3333% de su ancho.
+const TRACK_CENTER = -100 / 3;
 function trackReset() {
   lbTrack.style.transition = "none";
-  lbTrack.style.transform = "translateX(-100%)"; // centra el slide del medio
+  lbTrack.style.transform = `translateX(${TRACK_CENTER}%)`;
 }
 
 function showLightbox() {
@@ -595,7 +597,8 @@ function showLightbox() {
 function commitSlide(delta) {
   if (swAnimating || visiblePhotos.length < 2) return;
   swAnimating = true;
-  const targetX = -100 - delta * 100; // %: siguiente -> -200, anterior -> 0
+  // siguiente -> -66.66% (muestra el 3º), anterior -> 0% (muestra el 1º)
+  const targetX = TRACK_CENTER - delta * (100 / 3);
   lbTrack.style.transition = "transform 0.2s ease-out";
   lbTrack.style.transform = `translateX(${targetX}%)`;
   const onEnd = () => {
@@ -785,7 +788,7 @@ lb.addEventListener("touchstart", (e) => {
 lb.addEventListener("touchmove", (e) => {
   if (!swiping || pinching || zScale > 1 || e.touches.length !== 1) return;
   swDx = e.touches[0].clientX - swStartX;
-  lbTrack.style.transform = `translateX(calc(-100% + ${swDx}px))`;
+  lbTrack.style.transform = `translateX(calc(${TRACK_CENTER}% + ${swDx}px))`;
 }, { passive: true });
 
 lb.addEventListener("touchend", () => {
@@ -794,7 +797,7 @@ lb.addEventListener("touchend", () => {
   if (Math.abs(swDx) > SW_THRESHOLD) commitSlide(swDx < 0 ? 1 : -1);
   else { // no llega al umbral: vuelve a centrar
     lbTrack.style.transition = "transform 0.2s ease-out";
-    lbTrack.style.transform = "translateX(-100%)";
+    lbTrack.style.transform = `translateX(${TRACK_CENTER}%)`;
   }
 });
 

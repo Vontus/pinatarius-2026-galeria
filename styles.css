@@ -287,11 +287,12 @@ body.selecting .tile .check { display: flex; }
 }
 .lb-track {
   display: flex;
+  width: 300%;
   height: 100%;
-  transform: translateX(-100%); /* centra el slide del medio (actual) */
+  transform: translateX(-33.3333%); /* centra el slide del medio (actual) */
 }
 .lb-slide {
-  flex: 0 0 100%;
+  width: 33.3333%;
   height: 100%;
   object-fit: contain;
   user-select: none;
