@@ -167,17 +167,6 @@ main {
   transition: opacity 0.35s ease;
 }
 .tile img.loaded { opacity: 1; }
-/* Capa de imagen original (crossfade sobre la miniatura, sin parpadeo) */
-.tile .hires {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  opacity: 0;
-  transition: opacity 0.3s ease;
-}
-.tile .hires.shown { opacity: 1; }
 
 .tile .num {
   position: absolute;

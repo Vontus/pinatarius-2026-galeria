@@ -253,7 +253,7 @@ const io = new IntersectionObserver((entries) => {
     if (e.isIntersecting) {
       inView.add(img);
       // Si antes falló (quizá rate limit), permitimos reintentar al volver a verlo.
-      if (img.dataset.err === "1") { img.dataset.err = ""; img.dataset.fallback = ""; }
+      if (img.dataset.err === "1") img.dataset.err = "";
     } else {
       inView.delete(img);
       cancelLoad(img); // salió de pantalla: abortamos si estaba cargando
@@ -277,7 +277,7 @@ function pump() {
 
 function beginLoad(img) {
   loading.add(img);
-  img.src = img.dataset.fallback === "1" ? img.dataset.full : img.dataset.thumb;
+  img.src = img.dataset.thumb; // SOLO miniatura (nunca la original, para no saturar)
 }
 
 function cancelLoad(img) {
@@ -293,57 +293,6 @@ function resetLoader() {
   inView.clear();
   loading.clear();
   if (pumpTimer !== null) { clearTimeout(pumpTimer); pumpTimer = null; }
-  cancelPendingHires();
-}
-
-// --- Originales al quedarse quieto ---
-// Si el usuario lleva ~1s sin hacer scroll, cambiamos las miniaturas visibles
-// por la imagen original (nítida). Precargamos y luego intercambiamos para no
-// parpadear. Cola de baja concurrencia; se cancela al volver a hacer scroll.
-const HIRES_MAX = 3;
-let hiresActive = 0;
-const hiresPending = [];
-
-function cancelPendingHires() {
-  for (const img of hiresPending) img.dataset.hiresQ = "";
-  hiresPending.length = 0;
-}
-
-function pumpHires() {
-  while (hiresActive < HIRES_MAX && hiresPending.length) {
-    const img = hiresPending.shift();
-    img.dataset.hiresQ = "";
-    if (!inView.has(img) || img.dataset.hires === "1") continue;
-    hiresActive++;
-    // Crossfade: cargamos la original en una capa encima y la fundimos. La
-    // miniatura sigue debajo todo el tiempo, así que no hay parpadeo.
-    const tile = img.parentElement;
-    const hi = document.createElement("img");
-    hi.className = "hires";
-    hi.alt = "";
-    hi.decoding = "async";
-    hi.addEventListener("load", () => {
-      hiresActive--;
-      if (inView.has(img) && img.dataset.hires !== "1" && tile && tile.isConnected) {
-        img.dataset.hires = "1";
-        img.insertAdjacentElement("afterend", hi); // debajo de #num y ★, encima del thumb
-        requestAnimationFrame(() => hi.classList.add("shown"));
-      }
-      pumpHires();
-    });
-    hi.addEventListener("error", () => { hiresActive--; pumpHires(); });
-    hi.src = img.dataset.full;
-  }
-}
-
-function upgradeVisibleToFull() {
-  for (const img of inView) {
-    if (img.dataset.loaded === "1" && img.dataset.hires !== "1" && img.dataset.hiresQ !== "1") {
-      img.dataset.hiresQ = "1";
-      hiresPending.push(img);
-    }
-  }
-  pumpHires();
 }
 
 function makeTile(photo) {
@@ -355,7 +304,6 @@ function makeTile(photo) {
   img.alt = photo.label;
   img.decoding = "async";
   img.dataset.thumb = photo.thumb;
-  img.dataset.full = photo.full;
   img.addEventListener("load", () => {
     img.dataset.loaded = "1";
     loading.delete(img);
@@ -365,17 +313,10 @@ function makeTile(photo) {
   img.addEventListener("error", () => {
     if (!img.getAttribute("src")) return; // src vacío = cancelada, no es error
     loading.delete(img);
-    if (img.dataset.fallback !== "1") {
-      // si no hay miniatura 150x150, probamos con la imagen completa
-      img.dataset.fallback = "1";
-      if (inView.has(img)) beginLoad(img); else pump();
-    } else {
-      // Falló también la completa (puede ser rate limit). NO ocultamos el tile:
-      // lo dejamos gris y reintentará al volver a entrar en pantalla; al hacer
-      // clic igualmente intenta cargar la imagen completa en el visor.
-      img.dataset.err = "1";
-      pump();
-    }
+    // Solo miniaturas: si falla (p. ej. rate limit), dejamos el tile gris y se
+    // reintenta al volver a entrar en pantalla. Nunca cargamos la original aquí.
+    img.dataset.err = "1";
+    pump();
   });
 
   const num = document.createElement("span");
@@ -798,27 +739,17 @@ lb.addEventListener("touchend", () => {
   }
 });
 
-// --- Botón "volver arriba" + carga de originales al quedarse quieto ---
+// --- Botón "volver arriba" ---
 const toTop = document.getElementById("toTop");
 let toTopRaf = null;
-let idleTimer = null;
 
-function onScroll() {
-  if (toTopRaf === null) {
-    toTopRaf = requestAnimationFrame(() => {
-      toTopRaf = null;
-      toTop.classList.toggle("hidden", window.scrollY < 600);
-    });
-  }
-  // Al hacer scroll cancelamos las originales pendientes y rearmamos el reloj.
-  cancelPendingHires();
-  clearTimeout(idleTimer);
-  idleTimer = setTimeout(upgradeVisibleToFull, 1000);
-}
-window.addEventListener("scroll", onScroll, { passive: true });
-
-// Si el usuario no hace scroll al entrar, igualmente mejora la primera pantalla.
-idleTimer = setTimeout(upgradeVisibleToFull, 1000);
+window.addEventListener("scroll", () => {
+  if (toTopRaf !== null) return;
+  toTopRaf = requestAnimationFrame(() => {
+    toTopRaf = null;
+    toTop.classList.toggle("hidden", window.scrollY < 600);
+  });
+}, { passive: true });
 
 toTop.addEventListener("click", () => {
   // 'auto' = salto inmediato: no atravesamos la rejilla cargando miniaturas.
