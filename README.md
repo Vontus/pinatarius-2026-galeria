@@ -18,7 +18,7 @@ Esta versión no usa esa API. Los ficheros del servidor están numerados de form
 
 ## Funcionalidades
 
-- Cuadrícula con las 616 fotos, carga perezosa (lazy-load).
+- Cuadrícula con las 616 fotos, carga perezosa (lazy-load) usando miniaturas redimensionadas (150×150, ~10 KB) en vez de los originales (~600 KB).
 - Buscador por número de foto.
 - Visor (lightbox) con navegación por teclado (← →), swipe en móvil y botón de descarga.
 - Modo selección múltiple → **descargar varias fotos en un ZIP**.

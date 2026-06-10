@@ -111,12 +111,12 @@ main {
 }
 .grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
-  gap: 10px;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 8px;
 }
 .tile {
   position: relative;
-  aspect-ratio: 3 / 2;
+  aspect-ratio: 1 / 1;
   background: var(--surface);
   border-radius: var(--radius);
   overflow: hidden;
@@ -259,7 +259,7 @@ body.selecting .tile .check { display: flex; }
 }
 
 @media (max-width: 640px) {
-  .grid { grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 7px; }
+  .grid { grid-template-columns: repeat(auto-fill, minmax(105px, 1fr)); gap: 6px; }
   .lb-nav { width: 42px; height: 64px; font-size: 1.5rem; }
   .controls { flex-basis: 100%; justify-content: stretch; }
   #search { max-width: none; }

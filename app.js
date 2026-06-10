@@ -34,6 +34,10 @@ function buildList() {
 
 const PHOTOS = buildList();
 const urlFor = (n) => `${BASE}/${PREFIX}-${pad(n)}.jpg`;
+// Miniatura: WordPress genera un recorte cuadrado 150x150 para TODAS las fotos
+// (el resto de tamaños solo existen para imágenes 3:2, así que no son fiables).
+// ~10 KB cada una en vez de ~600 KB de la original -> rejilla mucho más ligera.
+const thumbFor = (n) => `${BASE}/${PREFIX}-${pad(n)}-150x150.jpg`;
 const fileName = (n) => `pinatarius-2026-${pad(n)}.jpg`;
 
 // --- DOM refs ---
@@ -84,9 +88,17 @@ function makeTile(n) {
   img.alt = `Foto ${n}`;
   img.loading = "lazy";
   img.decoding = "async";
-  img.dataset.src = urlFor(n);
+  img.dataset.src = thumbFor(n);
   img.addEventListener("load", () => img.classList.add("loaded"));
-  img.addEventListener("error", () => tile.classList.add("failed"));
+  img.addEventListener("error", () => {
+    // Si por lo que sea no hay miniatura 150x150, recae en la imagen completa.
+    if (img.dataset.fallback !== "1") {
+      img.dataset.fallback = "1";
+      img.src = urlFor(n);
+    } else {
+      tile.classList.add("failed");
+    }
+  });
 
   const num = document.createElement("span");
   num.className = "num";
