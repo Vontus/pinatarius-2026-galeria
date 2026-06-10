@@ -155,15 +155,66 @@ function applyFilters() {
 
 searchEl.addEventListener("input", applyFilters);
 
-// --- Render grid (lazy load) ---
-const io = new IntersectionObserver((entries, obs) => {
-  for (const entry of entries) {
-    if (!entry.isIntersecting) continue;
-    const img = entry.target;
-    img.src = img.dataset.src;
-    obs.unobserve(img);
+// --- Carga de miniaturas: cola con límite de concurrencia + cancelación ---
+//
+// En vez de disparar la carga de cada tile en cuanto roza la pantalla (lo que
+// hacía que un scroll rápido cargara TODAS), llevamos una cola:
+//  - Solo se cargan las que están realmente en vista.
+//  - Como mucho MAX_CONCURRENT a la vez.
+//  - Hay un pequeño "settle": si sigues haciendo scroll, no se empieza a cargar
+//    hasta que la cosa se calma un poco.
+//  - Si una imagen sale de pantalla antes de terminar, se ABORTA su descarga.
+const MAX_CONCURRENT = 5;
+const SETTLE_MS = 100;
+const inView = new Set();   // <img> actualmente en pantalla
+const loading = new Set();  // <img> con descarga en curso
+let pumpTimer = null;
+
+const io = new IntersectionObserver((entries) => {
+  for (const e of entries) {
+    const img = e.target;
+    if (e.isIntersecting) {
+      inView.add(img);
+    } else {
+      inView.delete(img);
+      cancelLoad(img); // salió de pantalla: abortamos si estaba cargando
+    }
   }
-}, { rootMargin: "600px 0px" });
+  schedulePump();
+}, { rootMargin: "150px 0px" });
+
+function schedulePump() {
+  if (pumpTimer !== null) return;
+  pumpTimer = setTimeout(() => { pumpTimer = null; pump(); }, SETTLE_MS);
+}
+
+function pump() {
+  for (const img of inView) {
+    if (loading.size >= MAX_CONCURRENT) break;
+    if (img.dataset.loaded === "1" || loading.has(img)) continue;
+    beginLoad(img);
+  }
+}
+
+function beginLoad(img) {
+  loading.add(img);
+  img.src = img.dataset.fallback === "1" ? img.dataset.full : img.dataset.thumb;
+}
+
+function cancelLoad(img) {
+  if (loading.has(img) && img.dataset.loaded !== "1") {
+    loading.delete(img);
+    img.removeAttribute("src"); // aborta la petición en curso
+    img.classList.remove("loaded");
+  }
+}
+
+function resetLoader() {
+  io.disconnect();
+  inView.clear();
+  loading.clear();
+  if (pumpTimer !== null) { clearTimeout(pumpTimer); pumpTimer = null; }
+}
 
 function makeTile(photo) {
   const tile = document.createElement("div");
@@ -173,16 +224,25 @@ function makeTile(photo) {
 
   const img = document.createElement("img");
   img.alt = photo.label;
-  img.loading = "lazy";
   img.decoding = "async";
-  img.dataset.src = photo.thumb;
-  img.addEventListener("load", () => img.classList.add("loaded"));
+  img.dataset.thumb = photo.thumb;
+  img.dataset.full = photo.full;
+  img.addEventListener("load", () => {
+    img.dataset.loaded = "1";
+    loading.delete(img);
+    img.classList.add("loaded");
+    pump(); // hueco libre: seguimos con la siguiente
+  });
   img.addEventListener("error", () => {
+    if (!img.getAttribute("src")) return; // src vacío = cancelada, no es error
+    loading.delete(img);
     if (img.dataset.fallback !== "1") {
+      // si no hay miniatura 150x150, probamos con la imagen completa
       img.dataset.fallback = "1";
-      img.src = photo.full;
+      if (inView.has(img)) beginLoad(img); else pump();
     } else {
       tile.classList.add("failed");
+      pump();
     }
   });
 
@@ -202,6 +262,7 @@ function makeTile(photo) {
 }
 
 function renderGrid(list) {
+  resetLoader();
   grid.innerHTML = "";
   const frag = document.createDocumentFragment();
   for (const p of list) frag.appendChild(makeTile(p));
