@@ -137,6 +137,10 @@ main {
   grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
   gap: 8px;
 }
+/* Miniaturas grandes (toggle) */
+body.big-thumbs .grid {
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+}
 .tile {
   position: relative;
   aspect-ratio: 1 / 1;
@@ -263,6 +267,11 @@ body.selecting .tile .check { display: flex; }
   max-height: 82vh;
   object-fit: contain;
   border-radius: 6px;
+  transform-origin: center center;
+  touch-action: none; /* gestionamos pinch/pan nosotros */
+  user-select: none;
+  -webkit-user-drag: none;
+  will-change: transform;
 }
 .lb-caption {
   display: flex;
@@ -356,6 +365,7 @@ body { padding-bottom: calc(var(--footer-h, 64px) + 10px); }
 
 @media (max-width: 640px) {
   .grid { grid-template-columns: repeat(auto-fill, minmax(105px, 1fr)); gap: 6px; }
+  body.big-thumbs .grid { grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); }
   .lb-nav { width: 42px; height: 64px; font-size: 1.5rem; }
   .controls { flex-basis: 100%; justify-content: stretch; }
   #search { max-width: none; }

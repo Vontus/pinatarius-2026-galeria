@@ -198,6 +198,17 @@ function setCategory(key) {
   currentCat = key;
   for (const b of filtersEl.children) b.classList.toggle("active", b.dataset.cat === key);
   applyFilters();
+  updateQuery();
+}
+
+// Refleja categoría y búsqueda en la URL (?cat=&q=) para poder compartir la vista.
+function updateQuery() {
+  const params = new URLSearchParams();
+  if (currentCat !== "all") params.set("cat", currentCat);
+  const q = searchEl.value.trim();
+  if (q) params.set("q", q);
+  const qs = params.toString();
+  history.replaceState(null, "", location.pathname + (qs ? "?" + qs : "") + location.hash);
 }
 
 // --- Filtro combinado (categoría + búsqueda) ---
@@ -217,7 +228,7 @@ function applyFilters() {
   renderGrid(visiblePhotos);
 }
 
-searchEl.addEventListener("input", applyFilters);
+searchEl.addEventListener("input", () => { applyFilters(); updateQuery(); });
 
 // --- Carga de miniaturas: cola con límite de concurrencia + cancelación ---
 //
@@ -369,8 +380,33 @@ function renderGrid(list) {
   appendBatch(); // primer lote; el resto se añade al hacer scroll
 }
 
+// --- Estado inicial desde la URL (?cat=&q=) ---
+(function initFromQuery() {
+  const params = new URLSearchParams(location.search);
+  const cat = params.get("cat");
+  if (cat && (cat === "fav" || CATS.some((c) => c.key === cat))) currentCat = cat;
+  const q = params.get("q");
+  if (q) searchEl.value = q;
+})();
+
+// --- Toggle de tamaño de miniaturas (persistido) ---
+const sizeToggle = document.getElementById("sizeToggle");
+const SIZE_KEY = "pinatarius2026:bigthumbs";
+function applyThumbSize() {
+  const big = localStorage.getItem(SIZE_KEY) === "1";
+  document.body.classList.toggle("big-thumbs", big);
+  sizeToggle.textContent = big ? "⊟" : "⊞";
+  sizeToggle.classList.toggle("active", big);
+}
+try { applyThumbSize(); } catch (e) {}
+sizeToggle.addEventListener("click", () => {
+  const big = !(localStorage.getItem(SIZE_KEY) === "1");
+  try { localStorage.setItem(SIZE_KEY, big ? "1" : "0"); } catch (e) {}
+  applyThumbSize();
+});
+
 buildFilters();
-renderGrid(visiblePhotos);
+applyFilters();
 
 // --- Toast ---
 let toastTimer = null;
@@ -473,12 +509,22 @@ function openLightbox(id) {
 function showLightbox() {
   const photo = visiblePhotos[lbIndex];
   if (!photo) return;
+  resetZoom();
   lbImg.src = photo.full;
   lbImg.alt = photo.label;
-  lbLabel.textContent = photo.label;
+  lbLabel.textContent = `${photo.label} · ${(lbIndex + 1).toLocaleString("es-ES")} de ${visiblePhotos.length.toLocaleString("es-ES")}`;
   lbDownload.href = photo.full;
   lbDownload.download = photo.file;
   updateLbFav();
+  preloadNeighbors();
+}
+
+// Precarga la siguiente y la anterior para que ← → sean instantáneas.
+function preloadNeighbors() {
+  for (const d of [1, -1]) {
+    const p = visiblePhotos[lbIndex + d];
+    if (p) { const im = new Image(); im.src = p.full; }
+  }
 }
 
 lbFav.addEventListener("click", () => {
@@ -491,8 +537,103 @@ function closeLightbox() {
   lbImg.src = "";
   document.body.style.overflow = "";
   lbIndex = -1;
+  resetZoom();
   setHash("");
 }
+
+// --- Zoom del visor (rueda en escritorio, pellizco/doble-tap en móvil) ---
+let zScale = 1, zx = 0, zy = 0;
+const Z_MAX = 5;
+
+function applyZoom() {
+  lbImg.style.transform = `translate(${zx}px, ${zy}px) scale(${zScale})`;
+  lbImg.style.cursor = zScale > 1 ? "grab" : "";
+  lbImg.classList.toggle("zoomed", zScale > 1);
+}
+function resetZoom() {
+  zScale = 1; zx = 0; zy = 0;
+  lbImg.style.transform = "";
+  lbImg.style.cursor = "";
+  lbImg.classList.remove("zoomed");
+}
+function clampZoom() {
+  if (zScale <= 1) { zx = 0; zy = 0; return; }
+  // límite de paneo para no sacar la imagen de la pantalla
+  const r = lbImg.getBoundingClientRect();
+  const maxX = (r.width * 0.5);
+  const maxY = (r.height * 0.5);
+  zx = Math.max(-maxX, Math.min(maxX, zx));
+  zy = Math.max(-maxY, Math.min(maxY, zy));
+}
+
+// Rueda del ratón (escritorio)
+lbImg.addEventListener("wheel", (e) => {
+  e.preventDefault();
+  const factor = e.deltaY < 0 ? 1.2 : 1 / 1.2;
+  zScale = Math.max(1, Math.min(Z_MAX, zScale * factor));
+  clampZoom();
+  applyZoom();
+}, { passive: false });
+
+// Doble clic / doble toque: alterna zoom
+let lastTap = 0;
+lbImg.addEventListener("dblclick", () => toggleZoom());
+function toggleZoom() {
+  zScale = zScale > 1 ? 1 : 2.5;
+  zx = 0; zy = 0;
+  applyZoom();
+}
+
+// Arrastre para mover (escritorio con ratón cuando hay zoom)
+let dragging = false, dragStartX = 0, dragStartY = 0, dragBaseX = 0, dragBaseY = 0;
+lbImg.addEventListener("mousedown", (e) => {
+  if (zScale <= 1) return;
+  e.preventDefault();
+  dragging = true; dragStartX = e.clientX; dragStartY = e.clientY; dragBaseX = zx; dragBaseY = zy;
+  lbImg.style.cursor = "grabbing";
+});
+window.addEventListener("mousemove", (e) => {
+  if (!dragging) return;
+  zx = dragBaseX + (e.clientX - dragStartX);
+  zy = dragBaseY + (e.clientY - dragStartY);
+  clampZoom(); applyZoom();
+});
+window.addEventListener("mouseup", () => { if (dragging) { dragging = false; lbImg.style.cursor = "grab"; } });
+
+// Táctil: pellizco para zoom, un dedo para paneo cuando hay zoom
+let pinchDist = 0, pinchBase = 1, panX0 = 0, panY0 = 0, panBaseX = 0, panBaseY = 0;
+function dist(t) {
+  const dx = t[0].clientX - t[1].clientX, dy = t[0].clientY - t[1].clientY;
+  return Math.hypot(dx, dy);
+}
+lbImg.addEventListener("touchstart", (e) => {
+  if (e.touches.length === 2) {
+    pinchDist = dist(e.touches); pinchBase = zScale;
+  } else if (e.touches.length === 1) {
+    // doble-tap
+    const now = Date.now();
+    if (now - lastTap < 300) { toggleZoom(); }
+    lastTap = now;
+    if (zScale > 1) {
+      panX0 = e.touches[0].clientX; panY0 = e.touches[0].clientY; panBaseX = zx; panBaseY = zy;
+    }
+  }
+}, { passive: true });
+lbImg.addEventListener("touchmove", (e) => {
+  if (e.touches.length === 2) {
+    e.preventDefault();
+    zScale = Math.max(1, Math.min(Z_MAX, pinchBase * (dist(e.touches) / pinchDist)));
+    clampZoom(); applyZoom();
+  } else if (e.touches.length === 1 && zScale > 1) {
+    e.preventDefault();
+    zx = panBaseX + (e.touches[0].clientX - panX0);
+    zy = panBaseY + (e.touches[0].clientY - panY0);
+    clampZoom(); applyZoom();
+  }
+}, { passive: false });
+lbImg.addEventListener("touchend", (e) => {
+  if (e.touches.length === 0 && zScale <= 1) resetZoom();
+});
 
 function step(delta) {
   if (lbIndex < 0) return;
@@ -538,11 +679,13 @@ document.addEventListener("keydown", (e) => {
   else if (e.key === "ArrowRight") step(1);
 });
 
-// Swipe en móvil
+// Swipe en móvil (solo si NO hay zoom; con zoom, un dedo panea)
 let touchX = null;
-lb.addEventListener("touchstart", (e) => { touchX = e.touches[0].clientX; }, { passive: true });
+lb.addEventListener("touchstart", (e) => {
+  touchX = (zScale <= 1 && e.touches.length === 1) ? e.touches[0].clientX : null;
+}, { passive: true });
 lb.addEventListener("touchend", (e) => {
-  if (touchX === null) return;
+  if (touchX === null || zScale > 1) { touchX = null; return; }
   const dx = e.changedTouches[0].clientX - touchX;
   if (Math.abs(dx) > 50) step(dx < 0 ? 1 : -1);
   touchX = null;
