@@ -291,6 +291,48 @@ function resetLoader() {
   inView.clear();
   loading.clear();
   if (pumpTimer !== null) { clearTimeout(pumpTimer); pumpTimer = null; }
+  cancelPendingHires();
+}
+
+// --- Originales al quedarse quieto ---
+// Si el usuario lleva ~1s sin hacer scroll, cambiamos las miniaturas visibles
+// por la imagen original (nítida). Precargamos y luego intercambiamos para no
+// parpadear. Cola de baja concurrencia; se cancela al volver a hacer scroll.
+const HIRES_MAX = 3;
+let hiresActive = 0;
+const hiresPending = [];
+
+function cancelPendingHires() {
+  for (const img of hiresPending) img.dataset.hiresQ = "";
+  hiresPending.length = 0;
+}
+
+function pumpHires() {
+  while (hiresActive < HIRES_MAX && hiresPending.length) {
+    const img = hiresPending.shift();
+    img.dataset.hiresQ = "";
+    if (!inView.has(img) || img.dataset.hires === "1") continue;
+    hiresActive++;
+    const full = img.dataset.full;
+    const pre = new Image();
+    pre.onload = () => {
+      hiresActive--;
+      if (inView.has(img)) { img.src = full; img.dataset.hires = "1"; }
+      pumpHires();
+    };
+    pre.onerror = () => { hiresActive--; pumpHires(); };
+    pre.src = full;
+  }
+}
+
+function upgradeVisibleToFull() {
+  for (const img of inView) {
+    if (img.dataset.loaded === "1" && img.dataset.hires !== "1" && img.dataset.hiresQ !== "1") {
+      img.dataset.hiresQ = "1";
+      hiresPending.push(img);
+    }
+  }
+  pumpHires();
 }
 
 function makeTile(photo) {
@@ -550,6 +592,7 @@ function applyZoom() {
 function resetZoom() {
   zScale = 1; zx = 0; zy = 0;
   lbImg.style.transform = "";
+  lbImg.style.transformOrigin = "";
   lbImg.style.cursor = "";
   lbImg.classList.remove("zoomed");
 }
@@ -610,7 +653,12 @@ lbImg.addEventListener("touchstart", (e) => {
     pinching = true;
     pinchDist = dist(e.touches);
     const m = mid(e.touches);
-    midStartX = m.x; midStartY = m.y; baseTx = zx; baseTy = zy;
+    midStartX = m.x; midStartY = m.y; baseTx = 0; baseTy = 0;
+    // Origen del zoom = punto entre los dedos (para ampliar desde ahí, no del centro).
+    const r = lbImg.getBoundingClientRect();
+    const ox = Math.max(0, Math.min(100, ((m.x - r.left) / r.width) * 100));
+    const oy = Math.max(0, Math.min(100, ((m.y - r.top) / r.height) * 100));
+    lbImg.style.transformOrigin = `${ox}% ${oy}%`;
     lbImg.style.transition = "none";
   }
 }, { passive: true });
@@ -629,10 +677,11 @@ function endPinch() {
   pinching = false;
   lbImg.style.transition = "transform 0.2s ease-out";
   zScale = 1; zx = 0; zy = 0;
-  applyZoom(); // anima de vuelta a tamaño normal
+  applyZoom(); // anima de vuelta a tamaño normal (sobre el mismo origen)
   setTimeout(() => {
     lbImg.style.transition = "";
     lbImg.style.transform = "";
+    lbImg.style.transformOrigin = "";
     lbImg.classList.remove("zoomed");
   }, 220);
 }
@@ -695,16 +744,28 @@ lb.addEventListener("touchend", (e) => {
   touchX = null;
 });
 
-// --- Botón "volver arriba" (salto instantáneo, sin animación) ---
+// --- Botón "volver arriba" + carga de originales al quedarse quieto ---
 const toTop = document.getElementById("toTop");
 let toTopRaf = null;
-window.addEventListener("scroll", () => {
-  if (toTopRaf !== null) return;
-  toTopRaf = requestAnimationFrame(() => {
-    toTopRaf = null;
-    toTop.classList.toggle("hidden", window.scrollY < 600);
-  });
-}, { passive: true });
+let idleTimer = null;
+
+function onScroll() {
+  if (toTopRaf === null) {
+    toTopRaf = requestAnimationFrame(() => {
+      toTopRaf = null;
+      toTop.classList.toggle("hidden", window.scrollY < 600);
+    });
+  }
+  // Al hacer scroll cancelamos las originales pendientes y rearmamos el reloj.
+  cancelPendingHires();
+  clearTimeout(idleTimer);
+  idleTimer = setTimeout(upgradeVisibleToFull, 1000);
+}
+window.addEventListener("scroll", onScroll, { passive: true });
+
+// Si el usuario no hace scroll al entrar, igualmente mejora la primera pantalla.
+idleTimer = setTimeout(upgradeVisibleToFull, 1000);
+
 toTop.addEventListener("click", () => {
   // 'auto' = salto inmediato: no atravesamos la rejilla cargando miniaturas.
   window.scrollTo({ top: 0, behavior: "auto" });

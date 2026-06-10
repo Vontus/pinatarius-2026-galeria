@@ -285,16 +285,24 @@ body.selecting .tile .check { display: flex; }
   color: var(--text);
 }
 .lb-close {
-  position: absolute;
+  position: fixed;
   top: 14px;
-  right: 18px;
-  background: none;
+  right: 14px;
+  z-index: 60; /* siempre por encima de la imagen (si no, en fotos altas la tapa) */
+  width: 44px;
+  height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.55); /* visible sobre cualquier foto */
   border: none;
+  border-radius: 50%;
   color: #fff;
-  font-size: 2.4rem;
+  font-size: 1.9rem;
   line-height: 1;
   cursor: pointer;
 }
+.lb-close:hover { background: rgba(0, 0, 0, 0.75); }
 .lb-nav {
   position: absolute;
   top: 50%;
