@@ -36,15 +36,19 @@
   <button class="lb-close" id="lbClose" aria-label="Cerrar">&times;</button>
   <button class="lb-nav lb-prev" id="lbPrev" aria-label="Anterior">&#10094;</button>
   <button class="lb-nav lb-next" id="lbNext" aria-label="Siguiente">&#10095;</button>
-  <figure class="lb-figure">
-    <img id="lbImg" alt="" />
-    <figcaption class="lb-caption">
-      <span id="lbLabel"></span>
-      <button id="lbFav" class="btn" aria-pressed="false">☆ Favorita</button>
-      <button id="lbShare" class="btn">Compartir</button>
-      <a id="lbDownload" class="btn btn-primary" download>Descargar foto</a>
-    </figcaption>
-  </figure>
+  <div class="lb-viewport" id="lbViewport">
+    <div class="lb-track" id="lbTrack">
+      <img class="lb-slide" id="lbPrevImg" alt="" decoding="async" />
+      <img class="lb-slide" id="lbImg" alt="" decoding="async" />
+      <img class="lb-slide" id="lbNextImg" alt="" decoding="async" />
+    </div>
+  </div>
+  <figcaption class="lb-caption">
+    <span id="lbLabel"></span>
+    <button id="lbFav" class="btn" aria-pressed="false">☆ Favorita</button>
+    <button id="lbShare" class="btn">Compartir</button>
+    <a id="lbDownload" class="btn btn-primary" download>Descargar foto</a>
+  </figcaption>
 </div>
 
 <button id="toTop" class="to-top hidden" aria-label="Volver arriba" title="Volver arriba">↑</button>

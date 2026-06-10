@@ -29,8 +29,7 @@ body {
   position: sticky;
   top: 0;
   z-index: 20;
-  background: rgba(13, 17, 23, 0.85);
-  backdrop-filter: saturate(180%) blur(12px);
+  background: rgba(13, 17, 23, 0.96);
   border-bottom: 1px solid var(--border);
 }
 .topbar-inner {
@@ -154,6 +153,10 @@ main {
   overflow: hidden;
   cursor: pointer;
   border: 2px solid transparent;
+  /* El navegador se salta el render de los tiles fuera de pantalla: abrir/cerrar
+     el visor y el scroll no recalculan miles de nodos. */
+  content-visibility: auto;
+  contain-intrinsic-size: 170px;
 }
 .tile img {
   width: 100%;
@@ -267,27 +270,34 @@ body.selecting .tile .check { display: flex; }
   z-index: 50;
   background: rgba(0,0,0,0.92);
   display: flex;
-  align-items: center;
-  justify-content: center;
-}
-.lb-figure {
-  margin: 0;
-  max-width: 95vw;
-  max-height: 95vh;
-  display: flex;
   flex-direction: column;
   align-items: center;
+  justify-content: center;
   gap: 14px;
 }
-#lbImg {
-  max-width: 95vw;
-  max-height: 82vh;
+/* Carrusel: viewport recorta y el track lleva 3 slides (anterior/actual/siguiente) */
+.lb-viewport {
+  position: relative;
+  width: 100vw;
+  height: 80vh;
+  overflow: hidden;
+}
+.lb-track {
+  display: flex;
+  height: 100%;
+  transform: translateX(-100vw); /* centra el slide del medio (actual) */
+}
+.lb-slide {
+  flex: 0 0 100vw;
+  height: 100%;
   object-fit: contain;
-  border-radius: 6px;
-  transform-origin: center center;
-  touch-action: none; /* gestionamos pinch/pan nosotros */
   user-select: none;
   -webkit-user-drag: none;
+}
+/* El slide actual admite zoom (transform propio, independiente del track) */
+#lbImg {
+  transform-origin: center center;
+  touch-action: none;
   will-change: transform;
 }
 .lb-caption {
@@ -374,8 +384,7 @@ body.selecting .tile .check { display: flex; }
   left: 0;
   right: 0;
   z-index: 30;
-  background: rgba(13, 17, 23, 0.92);
-  backdrop-filter: saturate(180%) blur(8px);
+  background: rgba(13, 17, 23, 0.96);
   border-top: 1px solid var(--border);
   padding: 8px 16px;
   color: var(--muted);
@@ -390,6 +399,7 @@ body { padding-bottom: calc(var(--footer-h, 64px) + 10px); }
 
 @media (max-width: 640px) {
   .grid { grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 6px; }
+  .tile { contain-intrinsic-size: 140px; }
 
   /* Controles: el buscador ocupa la fila y el botón de favoritas se vuelve
      compacto (solo ★) para no comerse el ancho. */
@@ -413,13 +423,12 @@ body { padding-bottom: calc(var(--footer-h, 64px) + 10px); }
   /* Visor: las flechas se ocultan (se navega con swipe) y se da más espacio a
      la imagen; los botones del pie van apilados a ancho completo. */
   .lb-nav { display: none; }
-  #lbImg { max-height: 74vh; }
-  .lb-figure { width: 94vw; gap: 10px; }
+  .lb-viewport { height: 72vh; }
   .lb-caption {
     flex-direction: column;
     align-items: stretch;
     gap: 8px;
-    width: 100%;
+    width: 92vw;
   }
   .lb-caption #lbLabel { text-align: center; }
   .lb-caption .btn { width: 100%; text-align: center; }

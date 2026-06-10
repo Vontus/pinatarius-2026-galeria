@@ -99,7 +99,10 @@ const downloadFavs = document.getElementById("downloadFavs");
 const toastEl = document.getElementById("toast");
 
 const lb = document.getElementById("lb");
+const lbTrack = document.getElementById("lbTrack");
 const lbImg = document.getElementById("lbImg");
+const lbPrevImg = document.getElementById("lbPrevImg");
+const lbNextImg = document.getElementById("lbNextImg");
 const lbLabel = document.getElementById("lbLabel");
 const lbDownload = document.getElementById("lbDownload");
 const lbClose = document.getElementById("lbClose");
@@ -554,25 +557,56 @@ function maybeSwipeHint() {
   toast("Desliza ← → para cambiar de foto · pellizca para ampliar");
 }
 
+function photoAt(i) {
+  const n = visiblePhotos.length;
+  return n ? visiblePhotos[((i % n) + n) % n] : null;
+}
+
+// Coloca anterior/actual/siguiente en los 3 slides del carrusel.
+function assignSlides() {
+  const cur = visiblePhotos[lbIndex];
+  if (!cur) return;
+  lbImg.src = cur.full;
+  lbImg.alt = cur.label;
+  const prev = photoAt(lbIndex - 1);
+  const next = photoAt(lbIndex + 1);
+  lbPrevImg.src = prev ? prev.full : "";
+  lbNextImg.src = next ? next.full : "";
+}
+
+function trackReset() {
+  lbTrack.style.transition = "none";
+  lbTrack.style.transform = "translateX(-100vw)"; // centra el slide del medio
+}
+
 function showLightbox() {
   const photo = visiblePhotos[lbIndex];
   if (!photo) return;
   resetZoom();
-  lbImg.src = photo.full;
-  lbImg.alt = photo.label;
+  trackReset();
+  assignSlides();
   lbLabel.textContent = `${photo.label} · ${(lbIndex + 1).toLocaleString("es-ES")} de ${visiblePhotos.length.toLocaleString("es-ES")}`;
   lbDownload.href = photo.full;
   lbDownload.download = photo.file;
   updateLbFav();
-  preloadNeighbors();
 }
 
-// Precarga la siguiente y la anterior para que ← → sean instantáneas.
-function preloadNeighbors() {
-  for (const d of [1, -1]) {
-    const p = visiblePhotos[lbIndex + d];
-    if (p) { const im = new Image(); im.src = p.full; }
-  }
+// Desliza el carrusel a la siguiente (delta=1) o anterior (delta=-1) con animación.
+function commitSlide(delta) {
+  if (swAnimating || visiblePhotos.length < 2) return;
+  swAnimating = true;
+  const targetX = -100 - delta * 100; // vw: siguiente -> -200, anterior -> 0
+  lbTrack.style.transition = "transform 0.2s ease-out";
+  lbTrack.style.transform = `translateX(${targetX}vw)`;
+  const onEnd = () => {
+    lbTrack.removeEventListener("transitionend", onEnd);
+    lbIndex = (lbIndex + delta + visiblePhotos.length) % visiblePhotos.length;
+    showLightbox(); // reasigna slides y recoloca el track en -100vw (sin animación)
+    swAnimating = false;
+    const photo = visiblePhotos[lbIndex];
+    if (photo) setHash(`foto-${photo.id}`);
+  };
+  lbTrack.addEventListener("transitionend", onEnd);
 }
 
 lbFav.addEventListener("click", () => {
@@ -699,10 +733,7 @@ lbImg.addEventListener("touchcancel", endPinch);
 
 function step(delta) {
   if (lbIndex < 0) return;
-  lbIndex = (lbIndex + delta + visiblePhotos.length) % visiblePhotos.length;
-  showLightbox();
-  const photo = visiblePhotos[lbIndex];
-  if (photo) setHash(`foto-${photo.id}`);
+  commitSlide(delta);
 }
 
 function syncFromHash() {
@@ -741,60 +772,31 @@ document.addEventListener("keydown", (e) => {
   else if (e.key === "ArrowRight") step(1);
 });
 
-// Swipe animado en móvil: la imagen sigue al dedo y desliza a la siguiente.
+// Swipe en móvil: arrastramos el carrusel (track) y desliza a la foto vecina.
 let swiping = false, swStartX = 0, swDx = 0, swAnimating = false;
 const SW_THRESHOLD = 60;
 
 lb.addEventListener("touchstart", (e) => {
   if (swAnimating || zScale > 1 || pinching || e.touches.length !== 1) { swiping = false; return; }
   swiping = true; swStartX = e.touches[0].clientX; swDx = 0;
-  lbImg.style.transition = "none";
+  lbTrack.style.transition = "none";
 }, { passive: true });
 
 lb.addEventListener("touchmove", (e) => {
   if (!swiping || pinching || zScale > 1 || e.touches.length !== 1) return;
   swDx = e.touches[0].clientX - swStartX;
-  lbImg.style.transform = `translateX(${swDx}px)`;
+  lbTrack.style.transform = `translateX(calc(-100vw + ${swDx}px))`;
 }, { passive: true });
 
 lb.addEventListener("touchend", () => {
   if (!swiping) return;
   swiping = false;
-  if (Math.abs(swDx) > SW_THRESHOLD) commitSwipe(swDx < 0 ? 1 : -1);
-  else { // no llega: vuelve al sitio
-    lbImg.style.transition = "transform 0.2s ease-out";
-    lbImg.style.transform = "translateX(0)";
+  if (Math.abs(swDx) > SW_THRESHOLD) commitSlide(swDx < 0 ? 1 : -1);
+  else { // no llega al umbral: vuelve a centrar
+    lbTrack.style.transition = "transform 0.2s ease-out";
+    lbTrack.style.transform = "translateX(-100vw)";
   }
 });
-
-function commitSwipe(delta) {
-  swAnimating = true;
-  const W = window.innerWidth;
-  lbImg.style.transition = "transform 0.18s ease-out";
-  lbImg.style.transform = `translateX(${-delta * W}px)`; // sale por su lado
-  const onOut = () => {
-    lbImg.removeEventListener("transitionend", onOut);
-    // carga la nueva y la coloca al otro lado (sin animación)
-    lbImg.style.transition = "none";
-    lbIndex = (lbIndex + delta + visiblePhotos.length) % visiblePhotos.length;
-    showLightbox(); // resetZoom limpia el transform
-    lbImg.style.transform = `translateX(${delta * W}px)`;
-    const photo = visiblePhotos[lbIndex];
-    if (photo) setHash(`foto-${photo.id}`);
-    // entra deslizando hasta el centro
-    requestAnimationFrame(() => {
-      lbImg.style.transition = "transform 0.18s ease-out";
-      lbImg.style.transform = "translateX(0)";
-      const onIn = () => {
-        lbImg.removeEventListener("transitionend", onIn);
-        lbImg.style.transition = ""; lbImg.style.transform = "";
-        swAnimating = false;
-      };
-      lbImg.addEventListener("transitionend", onIn);
-    });
-  };
-  lbImg.addEventListener("transitionend", onOut);
-}
 
 // --- Botón "volver arriba" + carga de originales al quedarse quieto ---
 const toTop = document.getElementById("toTop");
