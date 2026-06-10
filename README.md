@@ -8,7 +8,12 @@ Galería web **completa y sin repeticiones** de las fotos de la carrera Pinatari
 
 La galería oficial (`paraisodeportivosanpedrodelpinatar.com/galeria-pinatarius-2026/`) carga las fotos mediante scroll infinito contra la API `wp-json/blema/v1/galeria-vmfo`. Esa API **ignora el parámetro `offset`**: devuelva lo que devuelva la página, cada petición responde siempre con las **mismas 20 fotos**. Por eso al hacer scroll las imágenes se repiten una y otra vez y no se ven todas.
 
-Esta versión no usa esa API. La colección completa de la carrera está subida con nombres secuenciales `PINATARIUS-2026.N.jpg` (N = 1 … 2940, **~2900 fotos**), así que generamos las URLs directamente. Si algún número no existe, su hueco simplemente no se muestra (no hay repeticiones). La API rota solo exponía una fracción (las ~600 `variadas`); el resto de las fotos estaban ahí, solo que la galería oficial nunca llegaba a mostrarlas.
+Esta versión no usa esa API. Las fotos de la carrera están subidas en **dos colecciones distintas** (comprobado: no se solapan), ambas con numeración secuencial:
+
+- `PINATARIUS-2026.N.jpg` — N = 1 … 2940 (**~2900 fotos**, el grueso).
+- `variadas_pinatarius-NNN.jpg` — N = 1 … 619 (**~600 fotos**, la categoría "Varias"; los <100 con ceros a la izquierda).
+
+Generamos las URLs directamente (~3500 fotos en total). Si algún número no existe, su hueco simplemente no se muestra (no hay repeticiones). La API rota de la web oficial solo llegaba a exponer una fracción de las `variadas`; el resto de las fotos estaban ahí, pero la galería nunca las mostraba.
 
 ## CORS
 
@@ -18,7 +23,7 @@ Esta versión no usa esa API. La colección completa de la carrera está subida 
 
 ## Funcionalidades
 
-- Cuadrícula con ~2900 fotos, carga perezosa (lazy-load) usando miniaturas redimensionadas (150×150, ~10 KB) en vez de los originales (~600 KB).
+- Cuadrícula con ~3500 fotos, carga perezosa (lazy-load) usando miniaturas redimensionadas (150×150, ~10 KB) en vez de los originales (~600 KB).
 - Buscador por número de foto.
 - Visor (lightbox) con navegación por teclado (← →), swipe en móvil y botón de descarga.
 - Modo selección múltiple → **descargar varias fotos en un ZIP**.

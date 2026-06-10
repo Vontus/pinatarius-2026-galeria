@@ -7,25 +7,58 @@
  * (wp-json/blema/v1/galeria-vmfo) cuyo parámetro `offset` se ignora: cada
  * petición devuelve siempre las mismas 20 fotos -> de ahí las repeticiones.
  *
- * Aquí no usamos esa API. La colección completa de la carrera está subida con
- * nombres secuenciales PINATARIUS-2026.N.jpg (N = 1..2940, ~2900 fotos), así que
- * generamos las URLs directamente. Si algún número no existe, su hueco se oculta
- * solo (onerror) — no hace falta saber de antemano cuáles faltan.
- * Las imágenes del CDN responden con Access-Control-Allow-Origin: *, por lo
- * que podemos mostrarlas y descargarlas (incluso en ZIP) sin problemas de CORS.
+ * Aquí no usamos esa API. Las fotos de la carrera están subidas con nombres
+ * secuenciales en DOS colecciones distintas (lo comprobamos: no se solapan):
+ *   - PINATARIUS-2026.N.jpg        (N = 1..2940, ~2900 fotos, el grueso)
+ *   - variadas_pinatarius-NNN.jpg  (N = 1..619, categoría "Varias"; <100 con ceros)
+ * Generamos las URLs directamente. Si algún número no existe, su hueco se oculta
+ * solo (onerror) — sin repeticiones.
+ * Las imágenes del CDN responden con Access-Control-Allow-Origin: *, así que se
+ * pueden mostrar y descargar (incluso en ZIP) sin problemas de CORS.
  */
 
 const BASE = "https://paraisodeportivosanpedrodelpinatar.com/wp-content/uploads";
-const PREFIX = "PINATARIUS-2026";
-const MAX = 2940; // último número confirmado en el servidor
+const pad3 = (n) => String(n).padStart(3, "0");
 
-const PHOTOS = Array.from({ length: MAX }, (_, i) => i + 1);
+// Cada colección: cómo construir la URL completa, la miniatura y el nombre de fichero.
+const SETS = [
+  {
+    key: "p",
+    max: 2940,
+    full: (n) => `${BASE}/PINATARIUS-2026.${n}.jpg`,
+    thumb: (n) => `${BASE}/PINATARIUS-2026.${n}-150x150.jpg`,
+    file: (n) => `pinatarius-2026-${n}.jpg`,
+    label: (n) => `#${n}`,
+  },
+  {
+    key: "v",
+    max: 619,
+    full: (n) => `${BASE}/variadas_pinatarius-${pad3(n)}.jpg`,
+    thumb: (n) => `${BASE}/variadas_pinatarius-${pad3(n)}-150x150.jpg`,
+    file: (n) => `variadas-${pad3(n)}.jpg`,
+    label: (n) => `Varias #${n}`,
+  },
+];
 
-const urlFor = (n) => `${BASE}/${PREFIX}.${n}.jpg`;
-// Miniatura: WordPress genera un recorte cuadrado 150x150 para todas las fotos
-// (~10 KB cada una en vez de ~600 KB de la original -> rejilla mucho más ligera).
-const thumbFor = (n) => `${BASE}/${PREFIX}.${n}-150x150.jpg`;
-const fileName = (n) => `pinatarius-2026-${n}.jpg`;
+function buildPhotos() {
+  const out = [];
+  for (const s of SETS) {
+    for (let n = 1; n <= s.max; n++) {
+      out.push({
+        id: s.key + n,
+        num: n,
+        full: s.full(n),
+        thumb: s.thumb(n),
+        file: s.file(n),
+        label: s.label(n),
+      });
+    }
+  }
+  return out;
+}
+
+const PHOTOS = buildPhotos();
+const byId = new Map(PHOTOS.map((p) => [p.id, p]));
 
 // --- DOM refs ---
 const grid = document.getElementById("grid");
@@ -39,7 +72,6 @@ const selClear = document.getElementById("selClear");
 const selDownload = document.getElementById("selDownload");
 const toastEl = document.getElementById("toast");
 
-// Lightbox refs
 const lb = document.getElementById("lb");
 const lbImg = document.getElementById("lbImg");
 const lbLabel = document.getElementById("lbLabel");
@@ -51,13 +83,13 @@ const lbShare = document.getElementById("lbShare");
 
 // --- State ---
 let selecting = false;
-const selected = new Set();
-let visiblePhotos = PHOTOS.slice(); // tras filtro de búsqueda
+const selected = new Set(); // ids
+let visiblePhotos = PHOTOS.slice();
 let lbIndex = -1;
 
 countEl.textContent = `~${PHOTOS.length}`;
 
-// --- Render grid ---
+// --- Render grid (lazy load) ---
 const io = new IntersectionObserver((entries, obs) => {
   for (const entry of entries) {
     if (!entry.isIntersecting) continue;
@@ -67,22 +99,23 @@ const io = new IntersectionObserver((entries, obs) => {
   }
 }, { rootMargin: "600px 0px" });
 
-function makeTile(n) {
+function makeTile(photo) {
   const tile = document.createElement("div");
   tile.className = "tile";
-  tile.dataset.n = String(n);
+  tile.dataset.id = photo.id;
+  if (selected.has(photo.id)) tile.classList.add("selected");
 
   const img = document.createElement("img");
-  img.alt = `Foto ${n}`;
+  img.alt = photo.label;
   img.loading = "lazy";
   img.decoding = "async";
-  img.dataset.src = thumbFor(n);
+  img.dataset.src = photo.thumb;
   img.addEventListener("load", () => img.classList.add("loaded"));
   img.addEventListener("error", () => {
-    // Si por lo que sea no hay miniatura 150x150, recae en la imagen completa.
+    // Si no hay miniatura 150x150, recae en la imagen completa; si tampoco, se oculta.
     if (img.dataset.fallback !== "1") {
       img.dataset.fallback = "1";
-      img.src = urlFor(n);
+      img.src = photo.full;
     } else {
       tile.classList.add("failed");
     }
@@ -90,7 +123,7 @@ function makeTile(n) {
 
   const num = document.createElement("span");
   num.className = "num";
-  num.textContent = `#${n}`;
+  num.textContent = photo.label;
 
   const check = document.createElement("span");
   check.className = "check";
@@ -99,14 +132,14 @@ function makeTile(n) {
   tile.append(img, num, check);
   io.observe(img);
 
-  tile.addEventListener("click", () => onTileClick(n, tile));
+  tile.addEventListener("click", () => onTileClick(photo, tile));
   return tile;
 }
 
 function renderGrid(list) {
   grid.innerHTML = "";
   const frag = document.createDocumentFragment();
-  for (const n of list) frag.appendChild(makeTile(n));
+  for (const p of list) frag.appendChild(makeTile(p));
   grid.appendChild(frag);
   emptyEl.classList.toggle("hidden", list.length > 0);
 }
@@ -114,39 +147,33 @@ function renderGrid(list) {
 renderGrid(visiblePhotos);
 
 // --- Tile click: select or open ---
-function onTileClick(n, tile) {
+function onTileClick(photo, tile) {
   if (selecting) {
-    if (selected.has(n)) {
-      selected.delete(n);
+    if (selected.has(photo.id)) {
+      selected.delete(photo.id);
       tile.classList.remove("selected");
     } else {
-      selected.add(n);
+      selected.add(photo.id);
       tile.classList.add("selected");
     }
     updateSelbar();
   } else {
-    openLightbox(n);
+    openLightbox(photo.id);
   }
 }
 
-// --- Search ---
+// --- Search (por número de foto) ---
 searchEl.addEventListener("input", () => {
   const q = searchEl.value.trim();
   if (q === "") {
     visiblePhotos = PHOTOS.slice();
   } else if (/^\d+$/.test(q)) {
     const num = parseInt(q, 10);
-    visiblePhotos = PHOTOS.filter((n) => n === num || String(n).includes(q));
+    visiblePhotos = PHOTOS.filter((p) => p.num === num || String(p.num).includes(q));
   } else {
     visiblePhotos = [];
   }
   renderGrid(visiblePhotos);
-  // re-aplica el estado de selección visual
-  if (selecting) {
-    for (const tile of grid.children) {
-      if (selected.has(Number(tile.dataset.n))) tile.classList.add("selected");
-    }
-  }
 });
 
 // --- Selection mode ---
@@ -185,19 +212,7 @@ function hideToast() {
   toastEl.classList.add("hidden");
 }
 
-// --- Download single ---
-async function downloadOne(n) {
-  try {
-    const res = await fetch(urlFor(n), { mode: "cors" });
-    if (!res.ok) throw new Error(res.status);
-    const blob = await res.blob();
-    triggerDownload(blob, fileName(n));
-  } catch (e) {
-    // Fallback: abrir en pestaña nueva para guardar manualmente.
-    window.open(urlFor(n), "_blank");
-  }
-}
-
+// --- Descargas ---
 function triggerDownload(blob, name) {
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
@@ -209,47 +224,57 @@ function triggerDownload(blob, name) {
   setTimeout(() => URL.revokeObjectURL(url), 4000);
 }
 
-// --- Download ZIP of selection ---
+async function downloadOne(photo) {
+  try {
+    const res = await fetch(photo.full, { mode: "cors" });
+    if (!res.ok) throw new Error(res.status);
+    triggerDownload(await res.blob(), photo.file);
+  } catch (e) {
+    window.open(photo.full, "_blank"); // fallback: abrir para guardar a mano
+  }
+}
+
+// --- ZIP de la selección ---
 selDownload.addEventListener("click", async () => {
   if (selected.size === 0) return;
   if (typeof JSZip === "undefined") {
     toast("No se pudo cargar el compresor ZIP. Reintenta.");
     return;
   }
-  const nums = [...selected].sort((a, b) => a - b);
+  const ids = [...selected];
   selDownload.disabled = true;
   const zip = new JSZip();
   let done = 0;
   let failed = 0;
 
-  // Descarga en lotes para no saturar el navegador.
   const BATCH = 6;
-  for (let i = 0; i < nums.length; i += BATCH) {
-    const chunk = nums.slice(i, i + BATCH);
-    await Promise.all(chunk.map(async (n) => {
+  for (let i = 0; i < ids.length; i += BATCH) {
+    const chunk = ids.slice(i, i + BATCH);
+    await Promise.all(chunk.map(async (id) => {
+      const photo = byId.get(id);
       try {
-        const res = await fetch(urlFor(n), { mode: "cors" });
+        const res = await fetch(photo.full, { mode: "cors" });
         if (!res.ok) throw new Error(res.status);
-        zip.file(fileName(n), await res.blob());
+        zip.file(photo.file, await res.blob());
       } catch (e) {
         failed++;
       } finally {
         done++;
-        toast(`Preparando ZIP… ${done}/${nums.length}`, true);
+        toast(`Preparando ZIP… ${done}/${ids.length}`, true);
       }
     }));
   }
 
   toast("Comprimiendo…", true);
   const blob = await zip.generateAsync({ type: "blob" });
-  triggerDownload(blob, `pinatarius-2026-seleccion-${nums.length}.zip`);
+  triggerDownload(blob, `pinatarius-2026-seleccion-${ids.length}.zip`);
   hideToast();
   toast(failed ? `ZIP listo (${failed} fotos no se pudieron incluir).` : "ZIP descargado.");
   selDownload.disabled = false;
 });
 
-// --- Lightbox + deep-linking por hash (#foto-N) para poder compartir ---
-let suppressHash = false; // evita bucle entre hashchange y nuestras actualizaciones
+// --- Lightbox + deep-linking por hash (#foto-ID) para compartir ---
+let suppressHash = false;
 
 function setHash(value) {
   suppressHash = true;
@@ -258,31 +283,33 @@ function setHash(value) {
   } else {
     history.replaceState(null, "", location.pathname + location.search);
   }
-  // libera el flag tras el ciclo de eventos
   setTimeout(() => { suppressHash = false; }, 0);
 }
 
-function openLightbox(n) {
-  // Si la foto no está en el filtro actual, quitamos el filtro para poder verla.
-  if (!visiblePhotos.includes(n)) {
+function openLightbox(id) {
+  const photo = byId.get(id);
+  if (!photo) return;
+  let idx = visiblePhotos.findIndex((p) => p.id === id);
+  if (idx < 0) {
+    // La foto no está en el filtro actual: lo quitamos para poder verla.
     visiblePhotos = PHOTOS.slice();
+    idx = visiblePhotos.findIndex((p) => p.id === id);
   }
-  lbIndex = visiblePhotos.indexOf(n);
-  if (lbIndex < 0) return;
+  lbIndex = idx;
   showLightbox();
   lb.classList.remove("hidden");
   document.body.style.overflow = "hidden";
-  setHash(`foto-${n}`);
+  setHash(`foto-${id}`);
 }
 
 function showLightbox() {
-  const n = visiblePhotos[lbIndex];
-  if (n === undefined) return;
-  lbImg.src = urlFor(n);
-  lbImg.alt = `Foto ${n}`;
-  lbLabel.textContent = `Foto #${n}`;
-  lbDownload.href = urlFor(n);
-  lbDownload.download = fileName(n);
+  const photo = visiblePhotos[lbIndex];
+  if (!photo) return;
+  lbImg.src = photo.full;
+  lbImg.alt = photo.label;
+  lbLabel.textContent = photo.label;
+  lbDownload.href = photo.full;
+  lbDownload.download = photo.file;
 }
 
 function closeLightbox() {
@@ -297,21 +324,16 @@ function step(delta) {
   if (lbIndex < 0) return;
   lbIndex = (lbIndex + delta + visiblePhotos.length) % visiblePhotos.length;
   showLightbox();
-  const n = visiblePhotos[lbIndex];
-  if (n !== undefined) setHash(`foto-${n}`);
+  const photo = visiblePhotos[lbIndex];
+  if (photo) setHash(`foto-${photo.id}`);
 }
 
-// Abre la foto indicada en el hash de la URL (al cargar o al navegar atrás/adelante).
 function syncFromHash() {
   if (suppressHash) return;
-  const m = /^#foto-(\d+)$/.exec(location.hash);
-  if (m) {
-    const n = parseInt(m[1], 10);
-    if (PHOTOS.includes(n)) { openLightbox(n); return; }
-  }
+  const m = /^#foto-([pv]\d+)$/.exec(location.hash);
+  if (m && byId.has(m[1])) { openLightbox(m[1]); return; }
   if (!lb.classList.contains("hidden")) closeLightbox();
 }
-
 window.addEventListener("hashchange", syncFromHash);
 
 lbClose.addEventListener("click", closeLightbox);
@@ -319,28 +341,25 @@ lbPrev.addEventListener("click", () => step(-1));
 lbNext.addEventListener("click", () => step(1));
 lb.addEventListener("click", (e) => { if (e.target === lb) closeLightbox(); });
 
-// Descarga forzada desde el lightbox (en vez de navegar al .jpg).
 lbDownload.addEventListener("click", (e) => {
   e.preventDefault();
-  const n = visiblePhotos[lbIndex];
-  if (n !== undefined) downloadOne(n);
+  const photo = visiblePhotos[lbIndex];
+  if (photo) downloadOne(photo);
 });
 
-// Compartir: usa el diálogo nativo del móvil si existe; si no, copia el enlace.
 lbShare.addEventListener("click", async () => {
-  const n = visiblePhotos[lbIndex];
-  if (n === undefined) return;
-  const url = `${location.origin}${location.pathname}#foto-${n}`;
-  const title = `Foto #${n} · Pinatarius 2026`;
+  const photo = visiblePhotos[lbIndex];
+  if (!photo) return;
+  const url = `${location.origin}${location.pathname}#foto-${photo.id}`;
   try {
     if (navigator.share) {
-      await navigator.share({ title, url });
+      await navigator.share({ title: `${photo.label} · Pinatarius 2026`, url });
     } else {
       await navigator.clipboard.writeText(url);
       toast("Enlace copiado al portapapeles");
     }
   } catch (e) {
-    /* el usuario canceló el diálogo de compartir: no hacemos nada */
+    /* compartir cancelado */
   }
 });
 
@@ -361,5 +380,5 @@ lb.addEventListener("touchend", (e) => {
   touchX = null;
 });
 
-// Si la URL ya trae #foto-N al cargar, abrimos esa foto (enlace compartido).
+// Si la URL trae #foto-ID al cargar, abrimos esa foto (enlace compartido).
 syncFromHash();
