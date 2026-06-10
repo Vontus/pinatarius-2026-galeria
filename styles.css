@@ -305,6 +305,8 @@ body.selecting .tile .check { display: flex; }
   will-change: transform;
 }
 .lb-caption {
+  position: relative;
+  z-index: 55; /* por encima del viewport/imagen */
   display: flex;
   align-items: center;
   gap: 16px;
@@ -333,6 +335,7 @@ body.selecting .tile .check { display: flex; }
   position: absolute;
   top: 50%;
   transform: translateY(-50%);
+  z-index: 55; /* por encima del viewport (si no, la imagen los tapa) */
   background: rgba(255,255,255,0.08);
   border: none;
   color: #fff;
