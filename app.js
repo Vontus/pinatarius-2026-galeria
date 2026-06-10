@@ -175,6 +175,8 @@ const io = new IntersectionObserver((entries) => {
     const img = e.target;
     if (e.isIntersecting) {
       inView.add(img);
+      // Si antes falló (quizá rate limit), permitimos reintentar al volver a verlo.
+      if (img.dataset.err === "1") { img.dataset.err = ""; img.dataset.fallback = ""; }
     } else {
       inView.delete(img);
       cancelLoad(img); // salió de pantalla: abortamos si estaba cargando
@@ -191,7 +193,7 @@ function schedulePump() {
 function pump() {
   for (const img of inView) {
     if (loading.size >= MAX_CONCURRENT) break;
-    if (img.dataset.loaded === "1" || loading.has(img)) continue;
+    if (img.dataset.loaded === "1" || img.dataset.err === "1" || loading.has(img)) continue;
     beginLoad(img);
   }
 }
@@ -241,7 +243,10 @@ function makeTile(photo) {
       img.dataset.fallback = "1";
       if (inView.has(img)) beginLoad(img); else pump();
     } else {
-      tile.classList.add("failed");
+      // Falló también la completa (puede ser rate limit). NO ocultamos el tile:
+      // lo dejamos gris y reintentará al volver a entrar en pantalla; al hacer
+      // clic igualmente intenta cargar la imagen completa en el visor.
+      img.dataset.err = "1";
       pump();
     }
   });
