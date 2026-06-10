@@ -741,17 +741,60 @@ document.addEventListener("keydown", (e) => {
   else if (e.key === "ArrowRight") step(1);
 });
 
-// Swipe en móvil (solo si NO hay zoom; con zoom, un dedo panea)
-let touchX = null;
+// Swipe animado en móvil: la imagen sigue al dedo y desliza a la siguiente.
+let swiping = false, swStartX = 0, swDx = 0, swAnimating = false;
+const SW_THRESHOLD = 60;
+
 lb.addEventListener("touchstart", (e) => {
-  touchX = (zScale <= 1 && e.touches.length === 1) ? e.touches[0].clientX : null;
+  if (swAnimating || zScale > 1 || pinching || e.touches.length !== 1) { swiping = false; return; }
+  swiping = true; swStartX = e.touches[0].clientX; swDx = 0;
+  lbImg.style.transition = "none";
 }, { passive: true });
-lb.addEventListener("touchend", (e) => {
-  if (touchX === null || zScale > 1) { touchX = null; return; }
-  const dx = e.changedTouches[0].clientX - touchX;
-  if (Math.abs(dx) > 50) step(dx < 0 ? 1 : -1);
-  touchX = null;
+
+lb.addEventListener("touchmove", (e) => {
+  if (!swiping || pinching || zScale > 1 || e.touches.length !== 1) return;
+  swDx = e.touches[0].clientX - swStartX;
+  lbImg.style.transform = `translateX(${swDx}px)`;
+}, { passive: true });
+
+lb.addEventListener("touchend", () => {
+  if (!swiping) return;
+  swiping = false;
+  if (Math.abs(swDx) > SW_THRESHOLD) commitSwipe(swDx < 0 ? 1 : -1);
+  else { // no llega: vuelve al sitio
+    lbImg.style.transition = "transform 0.2s ease-out";
+    lbImg.style.transform = "translateX(0)";
+  }
 });
+
+function commitSwipe(delta) {
+  swAnimating = true;
+  const W = window.innerWidth;
+  lbImg.style.transition = "transform 0.18s ease-out";
+  lbImg.style.transform = `translateX(${-delta * W}px)`; // sale por su lado
+  const onOut = () => {
+    lbImg.removeEventListener("transitionend", onOut);
+    // carga la nueva y la coloca al otro lado (sin animación)
+    lbImg.style.transition = "none";
+    lbIndex = (lbIndex + delta + visiblePhotos.length) % visiblePhotos.length;
+    showLightbox(); // resetZoom limpia el transform
+    lbImg.style.transform = `translateX(${delta * W}px)`;
+    const photo = visiblePhotos[lbIndex];
+    if (photo) setHash(`foto-${photo.id}`);
+    // entra deslizando hasta el centro
+    requestAnimationFrame(() => {
+      lbImg.style.transition = "transform 0.18s ease-out";
+      lbImg.style.transform = "translateX(0)";
+      const onIn = () => {
+        lbImg.removeEventListener("transitionend", onIn);
+        lbImg.style.transition = ""; lbImg.style.transform = "";
+        swAnimating = false;
+      };
+      lbImg.addEventListener("transitionend", onIn);
+    });
+  };
+  lbImg.addEventListener("transitionend", onOut);
+}
 
 // --- Botón "volver arriba" + carga de originales al quedarse quieto ---
 const toTop = document.getElementById("toTop");
