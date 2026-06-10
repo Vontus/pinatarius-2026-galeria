@@ -7,38 +7,25 @@
  * (wp-json/blema/v1/galeria-vmfo) cuyo parámetro `offset` se ignora: cada
  * petición devuelve siempre las mismas 20 fotos -> de ahí las repeticiones.
  *
- * Aquí no usamos esa API. Los ficheros están numerados de forma secuencial
- * (variadas_pinatarius-N.jpg), así que generamos las URLs directamente.
+ * Aquí no usamos esa API. La colección completa de la carrera está subida con
+ * nombres secuenciales PINATARIUS-2026.N.jpg (N = 1..2940, ~2900 fotos), así que
+ * generamos las URLs directamente. Si algún número no existe, su hueco se oculta
+ * solo (onerror) — no hace falta saber de antemano cuáles faltan.
  * Las imágenes del CDN responden con Access-Control-Allow-Origin: *, por lo
  * que podemos mostrarlas y descargarlas (incluso en ZIP) sin problemas de CORS.
  */
 
 const BASE = "https://paraisodeportivosanpedrodelpinatar.com/wp-content/uploads";
-const PREFIX = "variadas_pinatarius";
-// En el servidor los números van con 3 dígitos y ceros a la izquierda:
-// -001.jpg ... -099.jpg ... -100.jpg ... -619.jpg
-const MIN = 1;
-const MAX = 619;
-const pad = (n) => String(n).padStart(3, "0");
-// Números que no existen en el servidor (comprobado con HEAD, sin seguir redirects,
-// con reintentos). Cualquier otro hueco se oculta solo vía onerror.
-const MISSING = new Set([251, 252, 482]);
+const PREFIX = "PINATARIUS-2026";
+const MAX = 2940; // último número confirmado en el servidor
 
-function buildList() {
-  const out = [];
-  for (let n = MIN; n <= MAX; n++) {
-    if (!MISSING.has(n)) out.push(n);
-  }
-  return out;
-}
+const PHOTOS = Array.from({ length: MAX }, (_, i) => i + 1);
 
-const PHOTOS = buildList();
-const urlFor = (n) => `${BASE}/${PREFIX}-${pad(n)}.jpg`;
-// Miniatura: WordPress genera un recorte cuadrado 150x150 para TODAS las fotos
-// (el resto de tamaños solo existen para imágenes 3:2, así que no son fiables).
-// ~10 KB cada una en vez de ~600 KB de la original -> rejilla mucho más ligera.
-const thumbFor = (n) => `${BASE}/${PREFIX}-${pad(n)}-150x150.jpg`;
-const fileName = (n) => `pinatarius-2026-${pad(n)}.jpg`;
+const urlFor = (n) => `${BASE}/${PREFIX}.${n}.jpg`;
+// Miniatura: WordPress genera un recorte cuadrado 150x150 para todas las fotos
+// (~10 KB cada una en vez de ~600 KB de la original -> rejilla mucho más ligera).
+const thumbFor = (n) => `${BASE}/${PREFIX}.${n}-150x150.jpg`;
+const fileName = (n) => `pinatarius-2026-${n}.jpg`;
 
 // --- DOM refs ---
 const grid = document.getElementById("grid");
@@ -67,7 +54,7 @@ const selected = new Set();
 let visiblePhotos = PHOTOS.slice(); // tras filtro de búsqueda
 let lbIndex = -1;
 
-countEl.textContent = PHOTOS.length;
+countEl.textContent = `~${PHOTOS.length}`;
 
 // --- Render grid ---
 const io = new IntersectionObserver((entries, obs) => {
@@ -148,9 +135,7 @@ searchEl.addEventListener("input", () => {
     visiblePhotos = PHOTOS.slice();
   } else if (/^\d+$/.test(q)) {
     const num = parseInt(q, 10);
-    visiblePhotos = PHOTOS.filter(
-      (n) => n === num || String(n).includes(q) || pad(n).includes(q)
-    );
+    visiblePhotos = PHOTOS.filter((n) => n === num || String(n).includes(q));
   } else {
     visiblePhotos = [];
   }
