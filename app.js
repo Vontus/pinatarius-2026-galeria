@@ -39,25 +39,27 @@ function source(tag, prefix, min, max, opts = {}) {
 
 // Categorías = carpetas de la galería oficial. Cada una puede tener VARIAS
 // fuentes (patrones de nombre de fichero distintos para la misma categoría).
+// `real` = nº real de fotos de esa carpeta en la galería oficial (vmfo). Lo
+// usamos para los contadores; los rangos generados son algo más amplios.
 const CATS = [
-  { key: "barro", label: "Barro y gladiator", sources: [
+  { key: "barro", label: "Barro y gladiator", real: 2731, sources: [
     source("p", "PINATARIUS-2026", 1, 2940, { sep: "." }),
   ]},
-  { key: "meta", label: "Meta y premeta", sources: [
+  { key: "meta", label: "Meta y premeta", real: 2731, sources: [
     source("pm", "premeta_pinatarius", 1, 2936, { sep: "" }),
   ]},
-  { key: "salida", label: "Salida", sources: [
+  { key: "salida", label: "Salida", real: 376, sources: [
     source("sal", "salida_pinatarius", 1, 312, { sep: "" }),
   ]},
-  { key: "playa", label: "Playa", sources: [
+  { key: "playa", label: "Playa", real: 3043, sources: [
     source("playa", "PLAYA_PINATARIUS", 1, 2430, { width: 4 }),
     source("villa", "PINATARIUS_VILLANANITOS", 1, 553, { width: 3 }),
   ]},
-  { key: "varias", label: "Varias", sources: [
+  { key: "varias", label: "Varias", real: 808, sources: [
     source("v", "variadas_pinatarius", 1, 619, { width: 3 }),
     source("vg", "variadas_pinatarius", 1, 126, { sep: "" }),
   ]},
-  { key: "photocall", label: "Photocall y premios", sources: [
+  { key: "photocall", label: "Photocall y premios", real: 236, sources: [
     source("pc", "PINATARIUS_PHOTOCALL", 1, 224, { width: 3 }),
     source("pod", "podium_pinatarius", 1, 1),
   ]},
@@ -123,20 +125,19 @@ let lbIndex = -1;
 const TOTAL_REAL = 9925;
 countEl.textContent = TOTAL_REAL.toLocaleString("es-ES");
 
-// --- Barra de filtros ---
+// --- Barra de filtros (con los conteos REALES de cada carpeta) ---
 function buildFilters() {
-  const counts = {};
-  for (const p of PHOTOS) counts[p.cat] = (counts[p.cat] || 0) + 1;
-  const defs = [{ key: "all", label: "Todas", n: PHOTOS.length }];
-  for (const c of CATS) if (counts[c.key]) defs.push({ key: c.key, label: c.label, n: counts[c.key] });
-  // Si solo hay una categoría con fotos, no mostramos filtros.
+  const fmt = (n) => n.toLocaleString("es-ES");
+  const defs = [{ key: "all", label: "Todas", n: TOTAL_REAL }];
+  for (const c of CATS) defs.push({ key: c.key, label: c.label, n: c.real });
+  // Si solo hay una categoría, no mostramos filtros.
   if (defs.length <= 2) { filtersEl.classList.add("hidden"); return; }
   filtersEl.innerHTML = "";
   for (const d of defs) {
     const b = document.createElement("button");
     b.className = "fbtn" + (d.key === currentCat ? " active" : "");
     b.dataset.cat = d.key;
-    b.innerHTML = `${d.label}<span class="cnt">${d.n}</span>`;
+    b.innerHTML = `${d.label}<span class="cnt">${fmt(d.n)}</span>`;
     b.addEventListener("click", () => setCategory(d.key));
     filtersEl.appendChild(b);
   }
