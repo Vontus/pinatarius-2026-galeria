@@ -47,6 +47,7 @@ const lbDownload = document.getElementById("lbDownload");
 const lbClose = document.getElementById("lbClose");
 const lbPrev = document.getElementById("lbPrev");
 const lbNext = document.getElementById("lbNext");
+const lbShare = document.getElementById("lbShare");
 
 // --- State ---
 let selecting = false;
@@ -247,12 +248,31 @@ selDownload.addEventListener("click", async () => {
   selDownload.disabled = false;
 });
 
-// --- Lightbox ---
+// --- Lightbox + deep-linking por hash (#foto-N) para poder compartir ---
+let suppressHash = false; // evita bucle entre hashchange y nuestras actualizaciones
+
+function setHash(value) {
+  suppressHash = true;
+  if (value) {
+    location.hash = value;
+  } else {
+    history.replaceState(null, "", location.pathname + location.search);
+  }
+  // libera el flag tras el ciclo de eventos
+  setTimeout(() => { suppressHash = false; }, 0);
+}
+
 function openLightbox(n) {
+  // Si la foto no está en el filtro actual, quitamos el filtro para poder verla.
+  if (!visiblePhotos.includes(n)) {
+    visiblePhotos = PHOTOS.slice();
+  }
   lbIndex = visiblePhotos.indexOf(n);
+  if (lbIndex < 0) return;
   showLightbox();
   lb.classList.remove("hidden");
   document.body.style.overflow = "hidden";
+  setHash(`foto-${n}`);
 }
 
 function showLightbox() {
@@ -270,13 +290,29 @@ function closeLightbox() {
   lbImg.src = "";
   document.body.style.overflow = "";
   lbIndex = -1;
+  setHash("");
 }
 
 function step(delta) {
   if (lbIndex < 0) return;
   lbIndex = (lbIndex + delta + visiblePhotos.length) % visiblePhotos.length;
   showLightbox();
+  const n = visiblePhotos[lbIndex];
+  if (n !== undefined) setHash(`foto-${n}`);
 }
+
+// Abre la foto indicada en el hash de la URL (al cargar o al navegar atrás/adelante).
+function syncFromHash() {
+  if (suppressHash) return;
+  const m = /^#foto-(\d+)$/.exec(location.hash);
+  if (m) {
+    const n = parseInt(m[1], 10);
+    if (PHOTOS.includes(n)) { openLightbox(n); return; }
+  }
+  if (!lb.classList.contains("hidden")) closeLightbox();
+}
+
+window.addEventListener("hashchange", syncFromHash);
 
 lbClose.addEventListener("click", closeLightbox);
 lbPrev.addEventListener("click", () => step(-1));
@@ -288,6 +324,24 @@ lbDownload.addEventListener("click", (e) => {
   e.preventDefault();
   const n = visiblePhotos[lbIndex];
   if (n !== undefined) downloadOne(n);
+});
+
+// Compartir: usa el diálogo nativo del móvil si existe; si no, copia el enlace.
+lbShare.addEventListener("click", async () => {
+  const n = visiblePhotos[lbIndex];
+  if (n === undefined) return;
+  const url = `${location.origin}${location.pathname}#foto-${n}`;
+  const title = `Foto #${n} · Pinatarius 2026`;
+  try {
+    if (navigator.share) {
+      await navigator.share({ title, url });
+    } else {
+      await navigator.clipboard.writeText(url);
+      toast("Enlace copiado al portapapeles");
+    }
+  } catch (e) {
+    /* el usuario canceló el diálogo de compartir: no hacemos nada */
+  }
 });
 
 document.addEventListener("keydown", (e) => {
@@ -306,3 +360,6 @@ lb.addEventListener("touchend", (e) => {
   if (Math.abs(dx) > 50) step(dx < 0 ? 1 : -1);
   touchX = null;
 });
+
+// Si la URL ya trae #foto-N al cargar, abrimos esa foto (enlace compartido).
+syncFromHash();
