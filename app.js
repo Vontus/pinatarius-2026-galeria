@@ -274,13 +274,38 @@ function makeTile(photo) {
   return tile;
 }
 
+// Renderizado incremental: en vez de crear ~10.000 nodos de golpe (lo que
+// congelaba al pulsar "Todas"), pintamos por lotes y añadimos más al acercarse
+// al final mediante un "sentinel".
+const RENDER_BATCH = 400;
+let renderList = [];
+let rendered = 0;
+
+const sentinel = document.createElement("div");
+sentinel.id = "gridSentinel";
+grid.after(sentinel);
+
+const appendIO = new IntersectionObserver((entries) => {
+  if (entries[0].isIntersecting) appendBatch();
+}, { rootMargin: "1200px 0px" });
+appendIO.observe(sentinel);
+
+function appendBatch() {
+  if (rendered >= renderList.length) return;
+  const end = Math.min(rendered + RENDER_BATCH, renderList.length);
+  const frag = document.createDocumentFragment();
+  for (let i = rendered; i < end; i++) frag.appendChild(makeTile(renderList[i]));
+  grid.appendChild(frag);
+  rendered = end;
+}
+
 function renderGrid(list) {
   resetLoader();
   grid.innerHTML = "";
-  const frag = document.createDocumentFragment();
-  for (const p of list) frag.appendChild(makeTile(p));
-  grid.appendChild(frag);
+  renderList = list;
+  rendered = 0;
   emptyEl.classList.toggle("hidden", list.length > 0);
+  appendBatch(); // primer lote; el resto se añade al hacer scroll
 }
 
 buildFilters();
