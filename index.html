@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Galería Pinatarius 2026 — todas las fotos</title>
+<meta name="description" content="Galería completa y sin repeticiones de las fotos de la carrera Pinatarius 2026. Visualiza y descarga tus fotos." />
+<link rel="preconnect" href="https://paraisodeportivosanpedrodelpinatar.com" />
+<link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+<header class="topbar">
+  <div class="topbar-inner">
+    <div class="brand">
+      <h1>Pinatarius 2026</h1>
+      <p class="subtitle">Galería completa · <span id="count">…</span> fotos</p>
+    </div>
+    <div class="controls">
+      <input id="search" type="search" inputmode="numeric" placeholder="Buscar por nº de foto (ej. 312)" autocomplete="off" />
+      <button id="selectToggle" class="btn">Seleccionar</button>
+    </div>
+  </div>
+  <div id="selbar" class="selbar hidden">
+    <span id="selCount">0 seleccionadas</span>
+    <div class="selbar-actions">
+      <button id="selClear" class="btn btn-ghost">Limpiar</button>
+      <button id="selDownload" class="btn btn-primary" disabled>Descargar ZIP</button>
+    </div>
+  </div>
+</header>
+
+<main>
+  <div id="grid" class="grid" aria-live="polite"></div>
+  <p id="empty" class="empty hidden">No hay fotos que coincidan con ese número.</p>
+</main>
+
+<!-- Lightbox -->
+<div id="lb" class="lb hidden" role="dialog" aria-modal="true" aria-label="Visor de foto">
+  <button class="lb-close" id="lbClose" aria-label="Cerrar">&times;</button>
+  <button class="lb-nav lb-prev" id="lbPrev" aria-label="Anterior">&#10094;</button>
+  <button class="lb-nav lb-next" id="lbNext" aria-label="Siguiente">&#10095;</button>
+  <figure class="lb-figure">
+    <img id="lbImg" alt="" />
+    <figcaption class="lb-caption">
+      <span id="lbLabel"></span>
+      <a id="lbDownload" class="btn btn-primary" download>Descargar foto</a>
+    </figcaption>
+  </figure>
+</div>
+
+<div id="toast" class="toast hidden"></div>
+
+<footer class="footer">
+  <p>Fotos alojadas en paraisodeportivosanpedrodelpinatar.com. Esta es una galería alternativa para verlas todas sin repeticiones. Las imágenes son propiedad de sus autores.</p>
+</footer>
+
+<script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js" defer></script>
+<script src="app.js" defer></script>
+</body>
+</html>
