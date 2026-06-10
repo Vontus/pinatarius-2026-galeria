@@ -8,7 +8,7 @@ Galería web **completa y sin repeticiones** de las fotos de la carrera Pinatari
 
 La galería oficial (`paraisodeportivosanpedrodelpinatar.com/galeria-pinatarius-2026/`) carga las fotos mediante scroll infinito contra la API `wp-json/blema/v1/galeria-vmfo`. Esa API **ignora el parámetro `offset`**: devuelva lo que devuelva la página, cada petición responde siempre con las **mismas 20 fotos**. Por eso al hacer scroll las imágenes se repiten una y otra vez y no se ven todas.
 
-Esta versión no usa esa API. Los ficheros del servidor están numerados de forma secuencial (`variadas_pinatarius-N.jpg`), así que generamos las URLs directamente y mostramos las **517 fotos** reales (números 100–619, salvo los huecos 251, 252 y 482 que no existen en el servidor).
+Esta versión no usa esa API. Los ficheros del servidor están numerados de forma secuencial (`variadas_pinatarius-N.jpg`), así que generamos las URLs directamente y mostramos las **616 fotos** reales (números 1–619 (con ceros: 001–099), salvo los huecos 251, 252 y 482 que no existen en el servidor).
 
 ## CORS
 
@@ -18,7 +18,7 @@ Esta versión no usa esa API. Los ficheros del servidor están numerados de form
 
 ## Funcionalidades
 
-- Cuadrícula con las 517 fotos, carga perezosa (lazy-load).
+- Cuadrícula con las 616 fotos, carga perezosa (lazy-load).
 - Buscador por número de foto.
 - Visor (lightbox) con navegación por teclado (← →), swipe en móvil y botón de descarga.
 - Modo selección múltiple → **descargar varias fotos en un ZIP**.

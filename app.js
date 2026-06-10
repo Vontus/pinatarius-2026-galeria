@@ -15,8 +15,11 @@
 
 const BASE = "https://paraisodeportivosanpedrodelpinatar.com/wp-content/uploads";
 const PREFIX = "variadas_pinatarius";
-const MIN = 100;
+// En el servidor los números van con 3 dígitos y ceros a la izquierda:
+// -001.jpg ... -099.jpg ... -100.jpg ... -619.jpg
+const MIN = 1;
 const MAX = 619;
+const pad = (n) => String(n).padStart(3, "0");
 // Números que no existen en el servidor (comprobado con HEAD, sin seguir redirects,
 // con reintentos). Cualquier otro hueco se oculta solo vía onerror.
 const MISSING = new Set([251, 252, 482]);
@@ -30,8 +33,8 @@ function buildList() {
 }
 
 const PHOTOS = buildList();
-const urlFor = (n) => `${BASE}/${PREFIX}-${n}.jpg`;
-const fileName = (n) => `pinatarius-2026-${n}.jpg`;
+const urlFor = (n) => `${BASE}/${PREFIX}-${pad(n)}.jpg`;
+const fileName = (n) => `pinatarius-2026-${pad(n)}.jpg`;
 
 // --- DOM refs ---
 const grid = document.getElementById("grid");
@@ -133,7 +136,9 @@ searchEl.addEventListener("input", () => {
     visiblePhotos = PHOTOS.slice();
   } else if (/^\d+$/.test(q)) {
     const num = parseInt(q, 10);
-    visiblePhotos = PHOTOS.filter((n) => String(n).includes(q) || n === num);
+    visiblePhotos = PHOTOS.filter(
+      (n) => n === num || String(n).includes(q) || pad(n).includes(q)
+    );
   } else {
     visiblePhotos = [];
   }
