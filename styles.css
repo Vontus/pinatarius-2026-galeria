@@ -89,6 +89,15 @@ body {
 .btn-primary { background: var(--accent); border-color: var(--accent); color: #fff; }
 .btn-primary:hover { background: var(--accent-hover); }
 .btn-ghost { background: transparent; }
+
+/* Botón de descargar favoritas: icono de descarga + estrella (+ texto) */
+#downloadFavs {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+#downloadFavs .ic { display: block; }
+#downloadFavs .star { color: #e3b341; }
 .btn.active { background: var(--accent); border-color: var(--accent); color: #fff; }
 
 /* Selection bar */
