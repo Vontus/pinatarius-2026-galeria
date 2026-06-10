@@ -116,7 +116,12 @@ let currentCat = "all";
 let visiblePhotos = PHOTOS.slice();
 let lbIndex = -1;
 
-countEl.textContent = `~${PHOTOS.length}`;
+// Total real de fotos = suma de las 7 carpetas de la galería oficial (vmfo):
+// BARRO 2161 + SALIDA 376 + PLAYA 3043 + GLADIATOR 570 + VARIAS 808 +
+// META Y PREMETA 2731 + PHOTOCALL Y PREMIOS 236 = 9925.
+// (Generamos rangos algo más amplios; los huecos sobrantes se quedan grises.)
+const TOTAL_REAL = 9925;
+countEl.textContent = TOTAL_REAL.toLocaleString("es-ES");
 
 // --- Barra de filtros ---
 function buildFilters() {
