@@ -101,7 +101,7 @@ const toastEl = document.getElementById("toast");
 
 const lb = document.getElementById("lb");
 const lbTrack = document.getElementById("lbTrack");
-const lbImg = document.getElementById("lbImg"); // original del slide central (para el zoom)
+const lbViewport = document.getElementById("lbViewport");
 // Cada slide del carrusel: miniatura borrosa (fondo) + original (encima) + recargar.
 const slideEls = [...lbTrack.querySelectorAll(".lb-slide")].map((el) => ({
   el,
@@ -109,6 +109,10 @@ const slideEls = [...lbTrack.querySelectorAll(".lb-slide")].map((el) => ({
   full: el.querySelector(".lb-full"),
   reload: el.querySelector(".lb-reload"),
 }));
+// El zoom actúa siempre sobre la original del slide central. Al deslizar rotamos
+// los elementos del carrusel (no reescribimos sus src), así que el central pasa a
+// ser otro elemento: lbImg se reapunta en rotateSlides().
+let lbImg = slideEls[1].full;
 const lbLabel = document.getElementById("lbLabel");
 const lbDownload = document.getElementById("lbDownload");
 const lbClose = document.getElementById("lbClose");
@@ -536,10 +540,43 @@ function photoAt(i) {
   return n ? visiblePhotos[((i % n) + n) % n] : null;
 }
 
+// --- Precarga persistente de la ventana (anterior/actual/siguiente) ---
+// Objetos Image() independientes del carrusel que mantienen vivas las descargas.
+// Como persisten entre swipes, la foto a la que navegas NO se reinicia: su
+// descarga sigue en curso y el <img> del carrusel se engancha a ella (o a la
+// caché si ya terminó), en vez de empezar de cero. Clave en conexiones lentas.
+const preloaders = new Map(); // url -> Image
+let winCurUrl = null, winPrevUrl = null, winNextUrl = null;
+function startPreload(url) {
+  if (!url || preloaders.has(url)) return;
+  const img = new Image();
+  img.decoding = "async";
+  img.src = url;
+  preloaders.set(url, img);
+}
+// Ajusta qué se está precargando: arranca la actual (y, si withNeighbors, los
+// lados) y aborta lo que ya quedó fuera de la ventana. Las URLs que siguen en la
+// ventana (p. ej. la foto a la que acabas de deslizar) se mantienen intactas.
+function setPreloadWindow(withNeighbors) {
+  const win = [winCurUrl, winPrevUrl, winNextUrl].filter(Boolean);
+  for (const [url, img] of preloaders) {
+    if (!win.includes(url)) { img.removeAttribute("src"); preloaders.delete(url); }
+  }
+  startPreload(winCurUrl);
+  if (withNeighbors) { startPreload(winPrevUrl); startPreload(winNextUrl); }
+}
+function clearPreloads() {
+  for (const [, img] of preloaders) img.removeAttribute("src");
+  preloaders.clear();
+  winCurUrl = winPrevUrl = winNextUrl = null;
+}
+
 // Pone una foto en un slide: miniatura borrosa al instante + original que se
 // funde encima al cargar (blur-up). La original va oculta hasta cargar, así que
 // nunca se ve la foto anterior aunque la nueva tarde.
-function setSlide(slide, photo) {
+// Con deferFull la miniatura carga ya pero la original queda pendiente: solo se
+// guarda su URL en dataset.src y la dispara después flushNeighborFulls().
+function setSlide(slide, photo, deferFull) {
   slide.el.classList.remove("errored");
   if (!photo) { slide.thumb.removeAttribute("src"); slide.full.removeAttribute("src"); slide.full.classList.remove("shown"); return; }
   if (slide.thumb.dataset.src !== photo.thumb) {
@@ -547,29 +584,78 @@ function setSlide(slide, photo) {
     slide.thumb.src = photo.thumb;
   }
   if (slide.full.dataset.src !== photo.full) {
+    // "instant" oculta la original anterior sin fundido de salida (si no, se vería
+    // la foto de la que vienes mientras la nueva aún no ha cargado).
+    slide.full.classList.add("instant");
     slide.full.classList.remove("shown");
     slide.full.dataset.manualRetry = "";
     slide.full.dataset.src = photo.full;
-    slide.full.src = photo.full;
+    if (deferFull) slide.full.removeAttribute("src");
+    else slide.full.src = photo.full;
   }
   // si ya estaba cargada (cacheada), muéstrala ya
   if (slide.full.complete && slide.full.naturalWidth) slide.full.classList.add("shown");
 }
 
-// Coloca anterior/actual/siguiente en los 3 slides del carrusel.
+// Carga las originales aplazadas de los slides laterales (URL ya en dataset.src
+// pero sin src). Las que sigan estando vacías arrancan ahora su descarga.
+function flushNeighborFulls() {
+  for (const s of [slideEls[0], slideEls[2]]) {
+    const want = s.full.dataset.src;
+    if (want && s.full.getAttribute("src") !== want) s.full.src = want;
+  }
+}
+
+// Tras abrir/cambiar de foto, espera a que la original actual cargue (o un
+// margen) antes de descargar anterior/siguiente, para que la foto que se abre
+// no compita por ancho de banda y aparezca cuanto antes.
+let neighborTimer = null;
+let neighborFlush = null;
+function scheduleNeighborFulls() {
+  const curFull = slideEls[1].full;
+  clearTimeout(neighborTimer);
+  if (neighborFlush) curFull.removeEventListener("load", neighborFlush);
+  const flush = () => {
+    clearTimeout(neighborTimer);
+    curFull.removeEventListener("load", flush);
+    neighborFlush = null;
+    flushNeighborFulls();
+    setPreloadWindow(true); // ya cargó la actual: precarga también los lados
+  };
+  neighborFlush = flush;
+  if (curFull.complete && curFull.naturalWidth) { flush(); return; }
+  curFull.addEventListener("load", flush);
+  // Por si la actual falla o tarda demasiado, no dejamos los lados sin precargar.
+  neighborTimer = setTimeout(flush, 2500);
+}
+
+// Coloca anterior/actual/siguiente en los 3 slides del carrusel. La foto actual
+// se descarga primero y sola; las originales de los lados quedan aplazadas.
 function assignSlides() {
   const cur = visiblePhotos[lbIndex];
   if (!cur) return;
-  setSlide(slideEls[0], photoAt(lbIndex - 1));
+  const prev = photoAt(lbIndex - 1), next = photoAt(lbIndex + 1);
+  winCurUrl = cur.full;
+  winPrevUrl = prev ? prev.full : null;
+  winNextUrl = next ? next.full : null;
   setSlide(slideEls[1], cur);
-  setSlide(slideEls[2], photoAt(lbIndex + 1));
+  setSlide(slideEls[0], prev, true);
+  setSlide(slideEls[2], next, true);
   lbImg.alt = cur.label;
+  // Arranca solo la actual; mantiene viva la foto a la que navegas (sin reinicio)
+  // y suelta la que quedó fuera de la ventana.
+  setPreloadWindow(false);
+  scheduleNeighborFulls();
 }
 
 // Handlers de carga/error/recarga de cada slide (una sola vez).
 for (const slide of slideEls) {
   slide.full.addEventListener("load", () => {
     slide.el.classList.remove("errored");
+    // Restaura la transición y fuerza un reflow para que el fundido de entrada
+    // (blur-up) se reproduzca al aparecer la nueva original.
+    slide.full.classList.remove("instant");
+    void slide.full.offsetWidth;
     slide.full.classList.add("shown");
     slide.full.dataset.manualRetry = "";
   });
@@ -601,6 +687,23 @@ function trackReset() {
   lbTrack.style.transform = `translateX(${TRACK_CENTER}%)`;
 }
 
+// Al deslizar rotamos los 3 elementos del carrusel en lugar de reescribir sus
+// src: el slide vecino que ya estabas viendo (con su imagen cargada) pasa a ser
+// el central, y solo el que entra por el lado opuesto recibe foto nueva (y está
+// fuera de pantalla). Así la foto a la que navegas no se vuelve a montar ni
+// reparpadea. El movimiento de nodo + el trackReset que viene después son
+// síncronos, así que el elemento que veías sigue centrado sin salto visual.
+function rotateSlides(delta) {
+  if (delta > 0) {        // siguiente: el primero pasa al final
+    lbTrack.appendChild(slideEls[0].el);
+    slideEls.push(slideEls.shift());
+  } else if (delta < 0) { // anterior: el último pasa al principio
+    lbTrack.insertBefore(slideEls[2].el, slideEls[0].el);
+    slideEls.unshift(slideEls.pop());
+  }
+  lbImg = slideEls[1].full; // el zoom apunta siempre al slide central
+}
+
 function showLightbox() {
   const photo = visiblePhotos[lbIndex];
   if (!photo) return;
@@ -623,8 +726,10 @@ function commitSlide(delta) {
   lbTrack.style.transform = `translateX(${targetX}%)`;
   const onEnd = () => {
     lbTrack.removeEventListener("transitionend", onEnd);
+    resetZoom(); // limpia el zoom del slide central que sale
     lbIndex = (lbIndex + delta + visiblePhotos.length) % visiblePhotos.length;
-    showLightbox(); // reasigna slides y recoloca el track en -100vw (sin animación)
+    rotateSlides(delta); // el vecino ya cargado pasa a central (sin reescribir su src)
+    showLightbox(); // recoloca el track (sin animación) y rellena solo el slide que entra
     swAnimating = false;
     const photo = visiblePhotos[lbIndex];
     if (photo) setHash(`foto-${photo.id}`);
@@ -642,6 +747,7 @@ function closeLightbox() {
   document.body.style.overflow = "";
   lbIndex = -1;
   resetZoom();
+  clearPreloads();
   setHash("");
 }
 
@@ -658,42 +764,74 @@ function resetZoom() {
   zScale = 1; zx = 0; zy = 0;
   lbImg.style.transform = "";
   lbImg.style.transformOrigin = "";
+  lbImg.style.transition = "";
   lbImg.style.cursor = "";
   lbImg.classList.remove("zoomed");
 }
 function clampZoom() {
   if (zScale <= 1) { zx = 0; zy = 0; return; }
-  // límite de paneo para no sacar la imagen de la pantalla
-  const r = lbImg.getBoundingClientRect();
-  const maxX = (r.width * 0.5);
-  const maxY = (r.height * 0.5);
+  // límite de paneo para no sacar la imagen de la pantalla. Usamos el viewport
+  // (sin transformar) × escala, así no depende del rect animándose de lbImg.
+  const r = lbViewport.getBoundingClientRect();
+  const maxX = r.width * zScale * 0.5;
+  const maxY = r.height * zScale * 0.5;
   zx = Math.max(-maxX, Math.min(maxX, zx));
   zy = Math.max(-maxY, Math.min(maxY, zy));
 }
 
-// Rueda del ratón (escritorio)
-lbImg.addEventListener("wheel", (e) => {
-  e.preventDefault();
-  const factor = e.deltaY < 0 ? 1.2 : 1 / 1.2;
-  zScale = Math.max(1, Math.min(Z_MAX, zScale * factor));
+// Aplica un nuevo nivel de zoom manteniendo fijo bajo el cursor el punto de la
+// imagen (en vez de ampliar desde el centro). Mantiene transform-origin en el
+// centro y ajusta la traslación con la fórmula de "zoom hacia un punto".
+function zoomTo(newScale, clientX, clientY) {
+  const r = lbViewport.getBoundingClientRect();
+  const ux = clientX - (r.left + r.width / 2);  // cursor respecto al centro
+  const uy = clientY - (r.top + r.height / 2);
+  const prev = zScale;
+  zScale = Math.max(1, Math.min(Z_MAX, newScale));
+  const ratio = zScale / prev;
+  zx = ux - ratio * (ux - zx);
+  zy = uy - ratio * (uy - zy);
   clampZoom();
-  applyZoom();
-}, { passive: false });
-
-// Doble clic (escritorio): alterna zoom
-lbImg.addEventListener("dblclick", () => toggleZoom());
-function toggleZoom() {
-  zScale = zScale > 1 ? 1 : 2.5;
-  zx = 0; zy = 0;
   applyZoom();
 }
 
+// Rueda del ratón / trackpad (escritorio): zoom proporcional al desplazamiento
+// (suave, sin saltos) y hacia el cursor.
+let wheelIdle = null;
+lbViewport.addEventListener("wheel", (e) => {
+  e.preventDefault();
+  // normaliza el delta entre ratón (líneas/páginas) y trackpad (píxeles)
+  let d = e.deltaY;
+  if (e.deltaMode === 1) d *= 16;                  // líneas -> px aprox.
+  else if (e.deltaMode === 2) d *= window.innerHeight; // páginas
+  // Paso proporcional al desplazamiento pero topado por evento (~9%): el ratón
+  // (deltas grandes) llega siempre al tope; el trackpad (deltas pequeños pero
+  // muchos eventos) acumula rápido. Topamos el factor, no el delta, porque si
+  // se recorta el delta el trackpad se queda corto y va lentísimo.
+  let factor = Math.exp(-d * 0.01);
+  factor = Math.max(0.914, Math.min(1.094, factor));
+  // transición corta para suavizar los pasos discretos de la rueda
+  lbImg.style.transition = "transform 0.12s ease-out";
+  zoomTo(zScale * factor, e.clientX, e.clientY);
+  // al dejar de hacer scroll, quita la transición para que arrastrar sea directo
+  clearTimeout(wheelIdle);
+  wheelIdle = setTimeout(() => { lbImg.style.transition = ""; }, 140);
+}, { passive: false });
+
+// Doble clic (escritorio): alterna zoom, hacia el cursor, con animación.
+lbViewport.addEventListener("dblclick", (e) => {
+  lbImg.style.transition = "transform 0.18s ease-out";
+  if (zScale > 1) { zScale = 1; zx = 0; zy = 0; applyZoom(); }
+  else { zoomTo(2.5, e.clientX, e.clientY); }
+});
+
 // Arrastre para mover (escritorio con ratón cuando hay zoom)
 let dragging = false, dragStartX = 0, dragStartY = 0, dragBaseX = 0, dragBaseY = 0;
-lbImg.addEventListener("mousedown", (e) => {
+lbViewport.addEventListener("mousedown", (e) => {
   if (zScale <= 1) return;
   e.preventDefault();
   dragging = true; dragStartX = e.clientX; dragStartY = e.clientY; dragBaseX = zx; dragBaseY = zy;
+  lbImg.style.transition = "none"; // arrastre directo, sin lag de la transición de la rueda
   lbImg.style.cursor = "grabbing";
 });
 window.addEventListener("mousemove", (e) => {
@@ -713,7 +851,7 @@ function dist(t) {
 function mid(t) {
   return { x: (t[0].clientX + t[1].clientX) / 2, y: (t[0].clientY + t[1].clientY) / 2 };
 }
-lbImg.addEventListener("touchstart", (e) => {
+lbViewport.addEventListener("touchstart", (e) => {
   if (e.touches.length === 2) {
     pinching = true;
     pinchDist = dist(e.touches);
@@ -727,7 +865,7 @@ lbImg.addEventListener("touchstart", (e) => {
     lbImg.style.transition = "none";
   }
 }, { passive: true });
-lbImg.addEventListener("touchmove", (e) => {
+lbViewport.addEventListener("touchmove", (e) => {
   if (e.touches.length === 2 && pinching) {
     e.preventDefault();
     zScale = Math.max(1, Math.min(Z_MAX, dist(e.touches) / pinchDist));
@@ -750,8 +888,8 @@ function endPinch() {
     lbImg.classList.remove("zoomed");
   }, 220);
 }
-lbImg.addEventListener("touchend", (e) => { if (e.touches.length < 2) endPinch(); });
-lbImg.addEventListener("touchcancel", endPinch);
+lbViewport.addEventListener("touchend", (e) => { if (e.touches.length < 2) endPinch(); });
+lbViewport.addEventListener("touchcancel", endPinch);
 
 function step(delta) {
   if (lbIndex < 0) return;

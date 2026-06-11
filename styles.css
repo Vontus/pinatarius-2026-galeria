@@ -350,14 +350,16 @@ body.selecting .tile .check { display: flex; }
   transition: opacity 0.3s ease;
   user-select: none;
   -webkit-user-drag: none;
-}
-.lb-full.shown { opacity: 1; }
-/* El slide actual admite zoom (transform propio, independiente del track) */
-#lbImg {
+  /* admite zoom (transform propio, independiente del track); cualquiera de los 3
+     slides puede ser el central tras rotar, por eso aplica a todos */
   transform-origin: center center;
   touch-action: none;
   will-change: transform;
 }
+.lb-full.shown { opacity: 1; }
+/* Al cambiar de foto: la original anterior se oculta al instante (sin fundido de
+   salida que dejaría verla mientras la nueva carga). El fundido de entrada sigue. */
+.lb-full.instant { transition: none; }
 /* Botón de recargar cuando falla la original */
 .lb-reload {
   position: absolute;
