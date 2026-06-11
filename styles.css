@@ -119,6 +119,16 @@ main {
   padding: 18px;
 }
 
+/* Texto introductorio (SEO + contexto) */
+.intro {
+  max-width: 70ch;
+  margin: 0 0 16px;
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--muted, #9aa0a6);
+}
+.intro strong { color: inherit; }
+
 /* Filtros por categoría */
 .filters {
   display: flex;
