@@ -42,24 +42,24 @@ function source(tag, prefix, min, max, opts = {}) {
 // `real` = nº real de fotos de esa carpeta en la galería oficial (vmfo). Lo
 // usamos para los contadores; los rangos generados son algo más amplios.
 const CATS = [
-  { key: "barro", label: "Barro y gladiator", real: 2731, sources: [
+  { key: "barro", label: "Barro y gladiator", short: "Barro/Glad", real: 2731, sources: [
     source("p", "PINATARIUS-2026", 1, 2940, { sep: "." }),
   ]},
-  { key: "meta", label: "Meta y premeta", real: 2731, sources: [
+  { key: "meta", label: "Meta y premeta", short: "Meta", real: 2731, sources: [
     source("pm", "premeta_pinatarius", 1, 2936, { sep: "" }),
   ]},
-  { key: "salida", label: "Salida", real: 376, sources: [
+  { key: "salida", label: "Salida", short: "Salida", real: 376, sources: [
     source("sal", "salida_pinatarius", 1, 312, { sep: "" }),
   ]},
-  { key: "playa", label: "Playa", real: 3043, sources: [
+  { key: "playa", label: "Playa", short: "Playa", real: 3043, sources: [
     source("playa", "PLAYA_PINATARIUS", 1, 2430, { width: 4 }),
     source("villa", "PINATARIUS_VILLANANITOS", 1, 553, { width: 3 }),
   ]},
-  { key: "varias", label: "Varias", real: 808, sources: [
+  { key: "varias", label: "Varias", short: "Varias", real: 808, sources: [
     source("v", "variadas_pinatarius", 1, 619, { width: 3 }),
     source("vg", "variadas_pinatarius", 1, 126, { sep: "" }),
   ]},
-  { key: "photocall", label: "Photocall y premios", real: 236, sources: [
+  { key: "photocall", label: "Photocall y premios", short: "Photocall", real: 236, sources: [
     source("pc", "PINATARIUS_PHOTOCALL", 1, 224, { width: 3 }),
     source("pod", "podium_pinatarius", 1, 1),
   ]},
@@ -75,6 +75,7 @@ function buildPhotos() {
           num: n,
           cat: cat.key,
           catLabel: cat.label,
+          catShort: cat.short,
           full: s.full(n),
           thumb: s.thumb(n),
           file: s.file(n),
@@ -100,9 +101,14 @@ const toastEl = document.getElementById("toast");
 
 const lb = document.getElementById("lb");
 const lbTrack = document.getElementById("lbTrack");
-const lbImg = document.getElementById("lbImg");
-const lbPrevImg = document.getElementById("lbPrevImg");
-const lbNextImg = document.getElementById("lbNextImg");
+const lbImg = document.getElementById("lbImg"); // original del slide central (para el zoom)
+// Cada slide del carrusel: miniatura borrosa (fondo) + original (encima) + recargar.
+const slideEls = [...lbTrack.querySelectorAll(".lb-slide")].map((el) => ({
+  el,
+  thumb: el.querySelector(".lb-thumb"),
+  full: el.querySelector(".lb-full"),
+  reload: el.querySelector(".lb-reload"),
+}));
 const lbLabel = document.getElementById("lbLabel");
 const lbDownload = document.getElementById("lbDownload");
 const lbClose = document.getElementById("lbClose");
@@ -180,10 +186,10 @@ function buildFilters() {
     b.addEventListener("click", () => setCategory(d.key));
     filtersEl.appendChild(b);
   }
-  updateFavFilter(); // botón de favoritas SIEMPRE, al final
+  updateFavFilter(); // botón de favoritas SIEMPRE, el primero
 }
 
-// El botón "★ Favoritas" va siempre el último (aunque haya 0; el contenido
+// El botón "★ Favoritas" va siempre el primero (aunque haya 0; el contenido
 // saldrá vacío). Solo actualizamos su contador.
 function updateFavFilter() {
   let b = filtersEl.querySelector('.fbtn[data-cat="fav"]');
@@ -192,7 +198,7 @@ function updateFavFilter() {
     b.className = "fbtn fbtn-fav" + (currentCat === "fav" ? " active" : "");
     b.dataset.cat = "fav";
     b.addEventListener("click", () => setCategory("fav"));
-    filtersEl.appendChild(b);
+    filtersEl.prepend(b); // al principio de la lista
   }
   b.innerHTML = `★ Favoritas<span class="cnt">${favorites.size.toLocaleString("es-ES")}</span>`;
 }
@@ -211,6 +217,11 @@ function updateQuery() {
   if (currentCat !== "all") params.set("cat", currentCat);
   const qs = params.toString();
   history.replaceState(null, "", location.pathname + (qs ? "?" + qs : "") + location.hash);
+}
+
+// Vista "mixta" = varias categorías juntas (el número reinicia por categoría).
+function isMixedView() {
+  return currentCat === "all" || currentCat === "fav" || currentCat === "shared";
 }
 
 // --- Filtro combinado (categoría + búsqueda) ---
@@ -306,22 +317,47 @@ function makeTile(photo) {
   img.dataset.thumb = photo.thumb;
   img.addEventListener("load", () => {
     img.dataset.loaded = "1";
+    img.dataset.err = "";
+    img.dataset.manualRetry = "";
     loading.delete(img);
     img.classList.add("loaded");
+    tile.classList.remove("errored");
     pump(); // hueco libre: seguimos con la siguiente
   });
   img.addEventListener("error", () => {
     if (!img.getAttribute("src")) return; // src vacío = cancelada, no es error
     loading.delete(img);
-    // Solo miniaturas: si falla (p. ej. rate limit), dejamos el tile gris y se
-    // reintenta al volver a entrar en pantalla. Nunca cargamos la original aquí.
+    // Solo miniaturas: si falla (p. ej. rate limit), marcamos el tile y mostramos
+    // un botón de recarga. También se reintenta al volver a entrar en pantalla.
     img.dataset.err = "1";
+    tile.classList.add("errored");
+    // Si el fallo es tras pulsar "recargar" a mano, avisamos: quizá no existe.
+    if (img.dataset.manualRetry === "1") {
+      img.dataset.manualRetry = "";
+      toast(`Foto #${photo.num}: es posible que esta imagen no exista.`);
+    }
     pump();
   });
 
   const num = document.createElement("span");
   num.className = "num";
-  num.textContent = `#${photo.num}`;
+  // En vistas mixtas (Todas/Favoritas/Compartidas) mostramos la categoría, porque
+  // el número reinicia en cada una; en una categoría concreta basta con #N.
+  num.textContent = isMixedView() ? `${photo.catShort} · ${photo.num}` : `#${photo.num}`;
+
+  const reload = document.createElement("button");
+  reload.type = "button";
+  reload.className = "reload";
+  reload.title = "Reintentar";
+  reload.textContent = "↻";
+  reload.setAttribute("aria-label", "Reintentar cargar la imagen");
+  reload.addEventListener("click", (e) => {
+    e.stopPropagation(); // no abrir el visor
+    tile.classList.remove("errored");
+    img.dataset.err = "";
+    img.dataset.manualRetry = "1"; // si vuelve a fallar, avisamos
+    if (inView.has(img)) beginLoad(img); else pump();
+  });
 
   const fav = document.createElement("button");
   fav.type = "button";
@@ -333,7 +369,7 @@ function makeTile(photo) {
     toggleFav(photo.id);
   });
 
-  tile.append(img, num, fav);
+  tile.append(img, num, fav, reload);
   io.observe(img);
 
   tile.addEventListener("click", () => openLightbox(photo.id));
@@ -500,16 +536,62 @@ function photoAt(i) {
   return n ? visiblePhotos[((i % n) + n) % n] : null;
 }
 
+// Pone una foto en un slide: miniatura borrosa al instante + original que se
+// funde encima al cargar (blur-up). La original va oculta hasta cargar, así que
+// nunca se ve la foto anterior aunque la nueva tarde.
+function setSlide(slide, photo) {
+  slide.el.classList.remove("errored");
+  if (!photo) { slide.thumb.removeAttribute("src"); slide.full.removeAttribute("src"); slide.full.classList.remove("shown"); return; }
+  if (slide.thumb.dataset.src !== photo.thumb) {
+    slide.thumb.dataset.src = photo.thumb;
+    slide.thumb.src = photo.thumb;
+  }
+  if (slide.full.dataset.src !== photo.full) {
+    slide.full.classList.remove("shown");
+    slide.full.dataset.manualRetry = "";
+    slide.full.dataset.src = photo.full;
+    slide.full.src = photo.full;
+  }
+  // si ya estaba cargada (cacheada), muéstrala ya
+  if (slide.full.complete && slide.full.naturalWidth) slide.full.classList.add("shown");
+}
+
 // Coloca anterior/actual/siguiente en los 3 slides del carrusel.
 function assignSlides() {
   const cur = visiblePhotos[lbIndex];
   if (!cur) return;
-  lbImg.src = cur.full;
+  setSlide(slideEls[0], photoAt(lbIndex - 1));
+  setSlide(slideEls[1], cur);
+  setSlide(slideEls[2], photoAt(lbIndex + 1));
   lbImg.alt = cur.label;
-  const prev = photoAt(lbIndex - 1);
-  const next = photoAt(lbIndex + 1);
-  lbPrevImg.src = prev ? prev.full : "";
-  lbNextImg.src = next ? next.full : "";
+}
+
+// Handlers de carga/error/recarga de cada slide (una sola vez).
+for (const slide of slideEls) {
+  slide.full.addEventListener("load", () => {
+    slide.el.classList.remove("errored");
+    slide.full.classList.add("shown");
+    slide.full.dataset.manualRetry = "";
+  });
+  slide.full.addEventListener("error", () => {
+    if (!slide.full.getAttribute("src")) return; // limpiado a propósito
+    slide.el.classList.add("errored");
+    // Si vuelve a fallar tras pulsar "Reintentar", avisamos: quizá no existe.
+    if (slide.full.dataset.manualRetry === "1") {
+      slide.full.dataset.manualRetry = "";
+      toast("Es posible que esta imagen no exista.");
+    }
+  });
+  slide.reload.addEventListener("click", (e) => {
+    e.stopPropagation();
+    slide.el.classList.remove("errored");
+    slide.full.classList.remove("shown");
+    slide.full.dataset.manualRetry = "1"; // si vuelve a fallar, avisamos
+    const f = slide.full.dataset.src, t = slide.thumb.dataset.src;
+    // forzamos recarga reasignando el src
+    if (t) { slide.thumb.src = ""; slide.thumb.src = t; }
+    if (f) { slide.full.src = ""; slide.full.src = f; }
+  });
 }
 
 // El track mide 300% (3 slides). Centrar el del medio = -33.3333% de su ancho.
@@ -557,7 +639,6 @@ lbFav.addEventListener("click", () => {
 
 function closeLightbox() {
   lb.classList.add("hidden");
-  lbImg.src = "";
   document.body.style.overflow = "";
   lbIndex = -1;
   resetZoom();
@@ -756,15 +837,15 @@ toTop.addEventListener("click", () => {
   window.scrollTo({ top: 0, behavior: "auto" });
 });
 
-// --- Altura real del footer fijo (para el hueco inferior y posicionar botones) ---
+// --- Alturas reales de footer y cabecera (para huecos y para el selector sticky) ---
 const footerEl = document.querySelector(".footer");
-function setFooterH() {
-  if (footerEl) {
-    document.documentElement.style.setProperty("--footer-h", `${footerEl.offsetHeight}px`);
-  }
+const topbarEl = document.querySelector(".topbar");
+function setBarHeights() {
+  if (footerEl) document.documentElement.style.setProperty("--footer-h", `${footerEl.offsetHeight}px`);
+  if (topbarEl) document.documentElement.style.setProperty("--topbar-h", `${topbarEl.offsetHeight}px`);
 }
-setFooterH();
-window.addEventListener("resize", () => requestAnimationFrame(setFooterH));
+setBarHeights();
+window.addEventListener("resize", () => requestAnimationFrame(setBarHeights));
 
 // Si la URL trae #foto-ID al cargar, abrimos esa foto (enlace compartido).
 syncFromHash();
