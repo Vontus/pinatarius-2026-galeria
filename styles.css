@@ -302,6 +302,9 @@ body.selecting .tile .check { display: flex; }
   align-items: center;
   justify-content: center;
   gap: 14px;
+  /* mismo respiro que a los lados (≈14px) para que la botonera no quede pegada
+     al borde inferior; suma el safe-area de móviles con notch */
+  padding-bottom: calc(14px + env(safe-area-inset-bottom, 0px));
   overflow: hidden; /* nada se sale de la pantalla */
 }
 /* Carrusel: viewport recorta y el track lleva 3 slides (anterior/actual/siguiente).
