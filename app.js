@@ -45,11 +45,14 @@ const CATS = [
   { key: "barro", label: "Barro y gladiator", short: "Barro/Glad", real: 2731, sources: [
     source("p", "PINATARIUS-2026", 1, 2940, { sep: "." }),
   ]},
-  { key: "meta", label: "Meta y premeta", short: "Meta", real: 2731, sources: [
+  { key: "meta", label: "Meta y premeta", short: "Meta", real: 2781, sources: [
     source("pm", "premeta_pinatarius", 1, 2936, { sep: "" }),
+    source("pmeta", "PINATARIUS_PREMETA", 1, 22, { width: 2 }),
+    source("mt", "PINATARIUS_META", 1, 28, { width: 2 }),
   ]},
-  { key: "salida", label: "Salida", short: "Salida", real: 376, sources: [
+  { key: "salida", label: "Salida", short: "Salida", real: 440, sources: [
     source("sal", "salida_pinatarius", 1, 312, { sep: "" }),
+    source("salv", "PINATARIUS_VARIADAS", 1, 64, { width: 2 }),
   ]},
   { key: "playa", label: "Playa", short: "Playa", real: 3043, sources: [
     source("playa", "PLAYA_PINATARIUS", 1, 2430, { width: 4 }),
@@ -168,10 +171,10 @@ function updateLbFav() {
 }
 
 // Total real de fotos = suma de las 7 carpetas de la galería oficial (vmfo):
-// BARRO 2161 + SALIDA 376 + PLAYA 3043 + GLADIATOR 570 + VARIAS 808 +
-// META Y PREMETA 2731 + PHOTOCALL Y PREMIOS 236 = 9925.
+// BARRO 2161 + SALIDA 440 + PLAYA 3043 + GLADIATOR 570 + VARIAS 808 +
+// META Y PREMETA 2781 + PHOTOCALL Y PREMIOS 236 = 10039.
 // (Generamos rangos algo más amplios; los huecos sobrantes se quedan grises.)
-const TOTAL_REAL = 9925;
+const TOTAL_REAL = 10039;
 countEl.textContent = TOTAL_REAL.toLocaleString("es-ES");
 
 // --- Barra de filtros (con los conteos REALES de cada carpeta) ---
